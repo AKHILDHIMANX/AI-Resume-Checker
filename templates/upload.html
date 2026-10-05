@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% from "_macros.html" import empty_state %}
+{% block title %}Upload resume{% endblock %}
+{% block description %}Upload a PDF resume and choose a target job role to start the analysis.{% endblock %}
+
+{% block content %}
+
+<div class="section-head">
+  <h1>Analyse a resume</h1>
+  <p class="hint">Choose a PDF, optionally pick the role you are targeting, and the
+    analyzer runs nine stages and returns a full dashboard.</p>
+</div>
+
+<form id="uploadForm" method="post" action="{{ url_for('analyze') }}"
+      enctype="multipart/form-data" novalidate>
+  <div class="grid grid-sidebar">
+
+    <!-- ===================== INPUTS ===================== -->
+    <div>
+      <div class="upload-card lit">
+        <div class="field" style="margin-top:0;">
+          <label for="resumeFile">Resume file &mdash; PDF only</label>
+
+          <div class="dropzone" id="dropzone" data-max-mb="{{ max_size_mb }}"
+               tabindex="0" role="button"
+               aria-label="Choose a PDF resume or drag and drop it here">
+            <input type="file" id="resumeFile" name="resume" accept="application/pdf,.pdf">
+            <div class="dz-icon" aria-hidden="true">&#128196;</div>
+            <p class="dz-title"><span class="dz-browse">Choose a file</span> or drag and drop it here</p>
+            <p class="dz-hint" id="dzHint">Text-based PDF only &middot; maximum {{ max_size_mb }} MB</p>
+            <p class="dz-hint" id="dzFilename" aria-live="polite"></p>
+            <p class="dz-filesize nums" id="dzFilesize"></p>
+          </div>
+
+          <p class="help" id="fileError" style="display:none;" role="alert"></p>
+          <p class="help">
+            Scanned or image-only PDFs cannot be read by an automated parser. Export your
+            resume as a text-based PDF (File &rarr; Save as &rarr; PDF).
+          </p>
+        </div>
+
+        <div class="field">
+          <label for="roleFilter">Target job role</label>
+          <input type="text" id="roleFilter" autocomplete="off"
+                 placeholder="Type to filter, e.g. python, data, devops"
+                 aria-describedby="roleHelp">
+          <p class="help" id="roleHelp">
+            Typing filters the list below. If the role is not in the built-in dataset it
+            is added as a custom entry &mdash; the quality analysis still runs, and the
+            report says the role is unknown instead of failing.
+          </p>
+          <div id="roleFallback" class="notice mt-1" hidden></div>
+
+          <div class="field" style="margin-top:12px;">
+            <label for="job_role" class="micro">Resolved role</label>
+            <select name="job_role" id="job_role">
+              <option value="">-- Analyse without a target role --</option>
+              {% for role in roles %}
+              <option value="{{ role.role }}">{{ role.role }} &mdash; {{ role.category }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary" id="submitBtn">Start analysis</button>
+          <a class="btn btn-secondary" href="{{ url_for('index') }}">Cancel</a>
+        </div>
+
+        <div class="progress" id="progress">
+          <div class="progress-track"><div class="progress-bar" id="progressBar"></div></div>
+          <p class="progress-label" id="progressLabel">Uploading PDF...</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===================== SIDEBAR ===================== -->
+    <div class="stack">
+      <div class="card lit">
+        <div class="card-head"><h3>Requirements</h3></div>
+        <ul class="small" style="margin:0;">
+          <li>A <strong>text-based</strong> PDF &mdash; not a photo or screenshot.</li>
+          <li>Under {{ max_size_mb }} MB.</li>
+          <li>One candidate per file.</li>
+          <li>Not password protected.</li>
+        </ul>
+      </div>
+
+      <div class="disclaimer">
+        <span aria-hidden="true">&#128274;</span>
+        <div>
+          <strong>What happens to my file?</strong>
+          It is read into memory, written under a random filename only so the server can
+          process it, and deleted the moment the analysis completes. Nothing is kept
+          permanently and nothing is sent to any external service.
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h3>Roles in the dataset</h3>
+          <span class="card-sub nums">{{ roles|length }}</span>
+        </div>
+        {% if roles %}
+        <div class="stack" style="gap:8px;">
+          {% for role in roles %}
+          <div class="advice-item" style="padding:11px 13px;">
+            <span class="ai-mark mark-fix" style="font-size:.7rem;">{{ loop.index }}</span>
+            <div class="ai-body">
+              <h4>{{ role.role }}</h4>
+              <p>{{ role.summary }}</p>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+          {{ empty_state('Job role dataset could not be loaded.') }}
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</form>
+
+{% endblock %}

@@ -1,0 +1,169 @@
+{
+  "metadata": {
+    "version": "1.0",
+    "description": "Target job roles for AI Resume Checker. Each role lists skills weighted by how commonly they appear in job descriptions for that role.",
+    "weighting": "skill_weight ranges from 1 (nice to have) to 3 (core requirement of the role)."
+  },
+  "roles": [
+    {
+      "role": "Python Developer",
+      "aliases": ["python developer", "python programmer", "backend python developer", "python engineer"],
+      "category": "Programming",
+      "summary": "Builds backend services, automation scripts and data applications using Python.",
+      "core_skills": ["Python", "Django", "Flask", "REST API", "SQL"],
+      "preferred_skills": ["MySQL", "PostgreSQL", "Git", "GitHub", "Linux", "Data Structures", "Algorithms", "Unit Testing"],
+      "bonus_skills": ["Docker", "AWS", "CI/CD", "Redis", "Pandas"],
+      "keywords": ["python", "django", "flask", "api", "backend", "sql", "database", "git", "testing", "automation", "microservice", "server", "function", "class", "module"],
+      "responsibilities": [
+        "Develop and maintain backend components",
+        "Write clean, tested and documented code",
+        "Design and optimise database schemas",
+        "Integrate third-party services through APIs"
+      ]
+    },
+    {
+      "role": "Software Developer",
+      "aliases": ["software developer", "software engineer", "software development engineer", "sde", "application developer"],
+      "category": "Programming",
+      "summary": "Designs, develops and maintains complete software products across the stack.",
+      "core_skills": ["Data Structures", "Algorithms", "OOP", "Git", "Debugging"],
+      "preferred_skills": ["Java", "C++", "Python", "SQL", "Software Engineering", "System Design", "SDLC"],
+      "bonus_skills": ["Docker", "CI/CD", "Linux", "GitHub", "Unit Testing", "Agile"],
+      "keywords": ["software", "development", "design", "implementation", "testing", "debugging", "requirements", "deployment", "maintain", "application", "programming", "code", "quality", "agile", "team"],
+      "responsibilities": [
+        "Translate requirements into working software",
+        "Participate in code reviews and testing",
+        "Follow the full software development life cycle",
+        "Work in a team to deliver on schedule"
+      ]
+    },
+    {
+      "role": "Data Analyst",
+      "aliases": ["data analyst", "business analyst", "reporting analyst", "analyst"],
+      "category": "Data",
+      "summary": "Turns raw data into dashboards, reports and business insights.",
+      "core_skills": ["SQL", "Excel", "Data Analysis", "Data Visualization"],
+      "preferred_skills": ["Power BI", "Tableau", "Pandas", "Statistics", "Python"],
+      "bonus_skills": ["NumPy", "Matplotlib", "ETL", "Google Analytics", "MySQL", "PostgreSQL"],
+      "keywords": ["data", "analysis", "report", "dashboard", "insight", "kpi", "sql", "query", "excel", "visualization", "trend", "cleaning", "dataset", "metric", "chart"],
+      "responsibilities": [
+        "Write efficient SQL queries and reports",
+        "Build dashboards for stakeholders",
+        "Clean and validate data before analysis",
+        "Present findings in a clear, business-friendly way"
+      ]
+    },
+    {
+      "role": "Data Scientist",
+      "aliases": ["data scientist", "ml analyst", "applied scientist"],
+      "category": "Data",
+      "summary": "Builds statistical models and machine learning solutions for real problems.",
+      "core_skills": ["Python", "Machine Learning", "Statistics", "Pandas", "Data Analysis"],
+      "preferred_skills": ["NumPy", "Scikit Learn", "Matplotlib", "SQL", "Data Visualization"],
+      "bonus_skills": ["Deep Learning", "Natural Language Processing", "Apache Spark", "Hadoop", "Tableau", "Git"],
+      "keywords": ["model", "machine learning", "statistics", "feature", "prediction", "accuracy", "regression", "classification", "clustering", "dataset", "hypothesis", "evaluation", "python", "insight", "experiment"],
+      "responsibilities": [
+        "Build and validate predictive models",
+        "Perform exploratory data analysis",
+        "Design experiments and evaluate model performance",
+        "Communicate model outcomes to non-technical teams"
+      ]
+    },
+    {
+      "role": "Machine Learning Engineer",
+      "aliases": ["machine learning engineer", "ml engineer", "ai engineer", "deep learning engineer"],
+      "category": "Data",
+      "summary": "Takes machine learning models from notebook to production service.",
+      "core_skills": ["Python", "Machine Learning", "Deep Learning", "Statistics", "SQL"],
+      "preferred_skills": ["NumPy", "Pandas", "Scikit Learn", "TensorFlow", "PyTorch", "REST API"],
+      "bonus_skills": ["Docker", "AWS", "GCP", "MLflow", "FastAPI", "CI/CD", "Apache Spark", "NLP"],
+      "keywords": ["model", "training", "inference", "pipeline", "feature engineering", "accuracy", "deep learning", "neural network", "deployment", "production", "pipeline", "experiment", "gpu", "accuracy", "serving"],
+      "responsibilities": [
+        "Train, tune and deploy machine learning models",
+        "Build reproducible training pipelines",
+        "Serve models through APIs",
+        "Monitor model performance in production"
+      ]
+    },
+    {
+      "role": "Web Developer",
+      "aliases": ["web developer", "frontend developer", "front end developer", "web designer"],
+      "category": "Web",
+      "summary": "Builds responsive, accessible browser based user interfaces.",
+      "core_skills": ["HTML", "CSS", "JavaScript", "Responsive Design"],
+      "preferred_skills": ["React", "Bootstrap", "jQuery", "Git", "GitHub"],
+      "bonus_skills": ["Angular", "Vue.js", "Tailwind CSS", "Figma", "Node.js", "WordPress", "Canva"],
+      "keywords": ["html", "css", "javascript", "frontend", "ui", "ux", "responsive", "web", "page", "browser", "design", "layout", "accessibility", "component", "website"],
+      "responsibilities": [
+        "Implement pixel-accurate responsive layouts",
+        "Write accessible, semantic HTML and modern CSS",
+        "Add interactive behaviour with JavaScript",
+        "Ensure cross-browser compatibility"
+      ]
+    },
+    {
+      "role": "Backend Developer",
+      "aliases": ["backend developer", "back end developer", "api developer", "server side developer"],
+      "category": "Web",
+      "summary": "Builds server-side logic, APIs and the data layer behind web applications.",
+      "core_skills": ["Python", "Java", "SQL", "REST API", "Data Structures"],
+      "preferred_skills": ["Node.js", "Django", "Flask", "Spring Boot", "MySQL", "PostgreSQL", "MongoDB"],
+      "bonus_skills": ["Docker", "Redis", "Microservices", "Linux", "Git", "CI/CD", "Nginx"],
+      "keywords": ["backend", "api", "server", "database", "endpoint", "service", "microservice", "authentication", "caching", "request", "response", "schema", "query", "performance", "integration"],
+      "responsibilities": [
+        "Design and build RESTful APIs",
+        "Design relational and NoSQL data models",
+        "Optimise query and service performance",
+        "Handle authentication, authorisation and error handling"
+      ]
+    },
+    {
+      "role": "Full Stack Developer",
+      "aliases": ["full stack developer", "fullstack developer", "full stack engineer"],
+      "category": "Web",
+      "summary": "Works across the entire stack - database, API and user interface.",
+      "core_skills": ["JavaScript", "HTML", "CSS", "React", "Node.js", "SQL"],
+      "preferred_skills": ["Python", "Django", "Flask", "Express.js", "MongoDB", "MySQL", "Git"],
+      "bonus_skills": ["Docker", "AWS", "CI/CD", "Next.js", "GraphQL", "Tailwind CSS", "Postman"],
+      "keywords": ["full stack", "frontend", "backend", "api", "database", "integration", "deploy", "end-to-end", "component", "server", "client", "responsive", "design", "version control"],
+      "responsibilities": [
+        "Build both client and server components",
+        "Integrate front-end forms with back-end APIs",
+        "Manage the project database end to end",
+        "Deploy and maintain the complete application"
+      ]
+    },
+    {
+      "role": "Cybersecurity Analyst",
+      "aliases": ["cybersecurity analyst", "security analyst", "cyber security analyst", "info security analyst", "SOC analyst"],
+      "category": "Security",
+      "summary": "Monitors, investigates and helps prevent security incidents.",
+      "core_skills": ["Cybersecurity", "Network Security", "Linux", "Ethical Hacking"],
+      "preferred_skills": ["Kali Linux", "Wireshark", "Nmap", "Burp Suite", "Python", "Vulnerability Assessment"],
+      "bonus_skills": ["Cryptography", "SIEM", "Incident Response", "Computer Networks", "Penetration Testing", "Firewall Configuration", "OWASP"],
+      "keywords": ["security", "threat", "vulnerability", "incident", "monitoring", "firewall", "malware", "phishing", "log", "risk", "audit", "patch", "forensics", "alert", "hardening"],
+      "responsibilities": [
+        "Monitor security events and investigate alerts",
+        "Run vulnerability scans and risk assessments",
+        "Support incident detection and response",
+        "Recommend hardening and best-practice controls"
+      ]
+    },
+    {
+      "role": "DevOps Engineer",
+      "aliases": ["devops engineer", "devops", "site reliability engineer", "sre", "cloud engineer"],
+      "category": "Cloud / DevOps",
+      "summary": "Automates build, deployment and infrastructure for applications.",
+      "core_skills": ["CI/CD", "Docker", "Linux", "AWS", "Git"],
+      "preferred_skills": ["Kubernetes", "Jenkins", "Ansible", "Terraform", "Python", "Bash", "GitHub"],
+      "bonus_skills": ["Azure", "GCP", "Nginx", "Shell Scripting", "Microservices", "Serverless", "Heroku"],
+      "keywords": ["automation", "pipeline", "deployment", "infrastructure", "container", "orchestration", "monitoring", "release", "configuration", "scaling", "availability", "docker", "kubernetes", "cloud", "devops"],
+      "responsibilities": [
+        "Build and maintain CI/CD pipelines",
+        "Containerise and orchestrate applications",
+        "Manage cloud infrastructure as code",
+        "Improve reliability, monitoring and deployment speed"
+      ]
+    }
+  ]
+}

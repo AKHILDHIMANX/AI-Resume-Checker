@@ -1,0 +1,229 @@
+{% extends "base.html" %}
+{% block title %}Home{% endblock %}
+{% block description %}Upload a PDF resume and get a quality score, ATS compatibility estimate, skill detection, radar analysis and job-role similarity. Private, offline, no signup.{% endblock %}
+
+{% block content %}
+
+<!-- ===================== HERO ===================== -->
+<section class="hero">
+  <div class="grid grid-sidebar">
+    <div>
+      <span class="eyebrow">MCA Semester 1 Project &middot; Python Programming</span>
+      <h1 class="display">
+        Read your resume<br>
+        <span class="grad-text">the way a screen does.</span>
+      </h1>
+      <p class="lead">
+        Upload a PDF and AI Resume Checker extracts the text, finds its sections, matches every
+        skill it can prove from the words on the page and scores the whole document
+        with a published rubric. Pick a target role and you also get an automated
+        resume-to-role similarity score.
+      </p>
+      <div class="hero-actions">
+        <a class="btn btn-primary" href="{{ url_for('analyze') }}">Analyse a resume</a>
+        <a class="btn btn-secondary" href="{{ url_for('methodology') }}">See the scoring formulas</a>
+      </div>
+    </div>
+
+    <!-- Layered 3D illustration: each plate is a real scoring component. -->
+    <div class="pedestal" aria-hidden="true">
+      <p class="micro mb-2">What one upload measures</p>
+      <div class="stack" style="gap:10px;">
+        {% set plates = [
+          ('Structure', 'Headings, contact details, sections, bullet usage'),
+          ('Content',    'Length, action verbs, measurable results, vague phrasing'),
+          ('Skills',     'Vocabulary match, TF-IDF keyword strength, soft skills'),
+          ('ATS estimate','Eight readability checks worth 100 points'),
+          ('Job match',  'Weighted skill coverage + cosine similarity')
+        ] %}
+        {% for name, detail in plates %}
+        <div class="card card-glass lit" style="padding:13px 15px; border-radius:var(--r-md);">
+          <h4 style="margin:0 0 .12rem;">{{ name }}</h4>
+          <p class="small muted" style="margin:0;">{{ detail }}</p>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== SCALE OF THE SYSTEM ===================== -->
+<div class="stat-strip">
+  <div class="stat-tile">
+    <div class="num nums" data-count-to="{{ stats.job_roles }}">{{ stats.job_roles }}</div>
+    <div class="lbl">Job roles supported</div>
+  </div>
+  <div class="stat-tile">
+    <div class="num nums" data-count-to="{{ stats.skills }}">{{ stats.skills }}</div>
+    <div class="lbl">Skills in the vocabulary</div>
+  </div>
+  <div class="stat-tile">
+    <div class="num nums" data-count-to="{{ stats.categories }}">{{ stats.categories }}</div>
+    <div class="lbl">Skill categories</div>
+  </div>
+  <div class="stat-tile">
+    <div class="num nums" data-count-to="{{ stats.soft_skills }}">{{ stats.soft_skills }}</div>
+    <div class="lbl">Soft skills tracked</div>
+  </div>
+</div>
+
+<!-- ===================== OUTPUT ===================== -->
+<section class="section">
+  <div class="section-head">
+    <h2><span class="section-icon">1</span> What one upload produces</h2>
+    <p class="hint">Every number comes from a measurement of your document. Nothing
+      is randomised, sampled or invented.</p>
+  </div>
+
+  <div class="feature-list">
+    <div class="feature tilt">
+      <span class="feature-no">01</span>
+      <h4>Weighted resume score</h4>
+      <p>A single 0&ndash;100 score built from four components, with every sub-check
+        and its point value listed in the dashboard.</p>
+    </div>
+    <div class="feature tilt">
+      <span class="feature-no">02</span>
+      <h4>Score radar</h4>
+      <p>A spider plot of Structure, Content, Skills, ATS and Overall, so a single weak
+        axis is visible instead of hidden inside an average.</p>
+    </div>
+    <div class="feature tilt">
+      <span class="feature-no">03</span>
+      <h4>ATS compatibility estimate</h4>
+      <p>Eight documented readability checks &mdash; headings, contact details, text
+        layer, length, formatting noise, bullets, keywords and completeness.</p>
+    </div>
+    <div class="feature tilt">
+      <span class="feature-no">04</span>
+      <h4>Skills &amp; keyword map</h4>
+      <p>Technical skills grouped by category, soft skills, action verbs and a TF-IDF
+        keyword ranking computed from the resume's own sentences.</p>
+    </div>
+    <div class="feature tilt">
+      <span class="feature-no">05</span>
+      <h4>Job role similarity</h4>
+      <p>Weighted skill coverage plus TF-IDF cosine similarity against any of the
+        {{ stats.job_roles }} roles, with the exact matched and missing skills listed.</p>
+    </div>
+    <div class="feature tilt">
+      <span class="feature-no">06</span>
+      <h4>Prioritised fixes</h4>
+      <p>Strengths, weaknesses and a ranked action list, plus a downloadable text
+        report of the same numbers.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== PIPELINE ===================== -->
+<section class="section">
+  <div class="grid grid-sidebar">
+    <div class="card lit">
+      <div class="card-head">
+        <h3>How the analysis works</h3>
+        <span class="card-sub">nine deterministic stages</span>
+      </div>
+      <ol class="workflow" aria-label="Analysis pipeline">
+        <li>Upload</li>
+        <li>Extract text</li>
+        <li>Clean</li>
+        <li>Detect sections</li>
+        <li>Match skills</li>
+        <li>TF-IDF</li>
+        <li>Cosine similarity</li>
+        <li>Score</li>
+        <li>Render charts</li>
+      </ol>
+
+      <hr class="divider">
+
+      <div class="steps">
+        <div class="step">
+          <div>
+            <strong>Upload and validate</strong>
+            <p>The file must be a real PDF under {{ max_size_mb }} MB. It is saved under
+              a random safe name, never exposed publicly, and deleted as soon as the
+              analysis finishes.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div>
+            <strong>Extract and clean the text</strong>
+            <p>pypdf reads the text layer and pdfplumber recovers anything missed.
+              Ligatures, smart quotes, bullets and broken line wraps are normalised.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div>
+            <strong>Detect sections and fields</strong>
+            <p>Headings are matched against standard spellings with regular expressions;
+              email, phone, links, degrees, institutions, years and dates are pulled out
+              with targeted patterns.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div>
+            <strong>Match skills and keywords</strong>
+            <p>Every skill in <span class="mono">data/skills.json</span> is matched with a
+              word-boundary aware regex plus an alias map, then TF-IDF surfaces the terms
+              that matter most in this document.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div>
+            <strong>Score, compare and render</strong>
+            <p>Weighted sub-checks produce the four component scores. Cosine similarity
+              compares the resume with the chosen role, and matplotlib renders the charts
+              and radar plots.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="stack">
+      <div class="card lit">
+        <div class="card-head"><h3>Who it is for</h3></div>
+        <ul class="small">
+          <li>MCA / BCA / B.Tech students writing a first resume</li>
+          <li>Final-year students preparing for campus placements</li>
+          <li>Freshers wanting feedback before sending applications</li>
+          <li>Anyone curious about how keyword screening actually works</li>
+        </ul>
+      </div>
+
+      <div class="disclaimer">
+        <span aria-hidden="true">&#9878;</span>
+        <div>
+          <strong>What this tool will not do.</strong>
+          It does not decide whether you are qualified for a job. The ATS number is a
+          readability estimate, not a run of any vendor's product. It cannot read scanned
+          or image-only PDFs. And it works fully offline &mdash; no account, no third
+          party upload.
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h3>Built with</h3></div>
+        <div class="tag-cloud">
+          <span class="tag">Python</span>
+          <span class="tag">Flask</span>
+          <span class="tag">pypdf</span>
+          <span class="tag">pdfplumber</span>
+          <span class="tag">NumPy</span>
+          <span class="tag">pandas</span>
+          <span class="tag">scikit-learn</span>
+          <span class="tag">Matplotlib</span>
+          <span class="tag">HTML5</span>
+          <span class="tag">CSS3</span>
+          <span class="tag">Vanilla JS</span>
+          <span class="tag">Jinja2</span>
+        </div>
+        <p class="small muted mt-2">
+          No JavaScript framework, no CSS framework, no database and no build step.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+{% endblock %}

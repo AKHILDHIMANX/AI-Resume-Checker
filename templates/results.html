@@ -1,0 +1,911 @@
+{% extends "base.html" %}
+{% from "_macros.html" import meter, score_ring, heat_cell, keyword_bar, chart_block,
+                            pedestal_chart, stat_row, empty_state, priority_badge,
+                            tone_for, score_rail %}
+
+{% block title %}Analysis result{% endblock %}
+{% block description %}AI Resume Checker analysis dashboard for {{ overview.name }}.{% endblock %}
+
+{% block content %}
+
+{# ---------------------------------------------------------------- helpers #}
+{% set comps = scores.components %}
+{% set best = comps|sort(attribute='score', reverse=true)|first %}
+{% set worst = comps|sort(attribute='score')|first %}
+{% set max_cat = (skills.technical_by_category.values()|map('length')|max) or 1 %}
+{% set kw_max = (skills.keywords|map(attribute='score')|max) or 1 %}
+{% set freq_max = (skills.frequent_terms|map(attribute='count')|max) or 1 %}
+{% set bands = [(90, 'Excellent'), (80, 'Very Good'), (70, 'Good'), (60, 'Needs Improvement'), (40, 'Weak')] %}
+{% set nxt = namespace(name=None, gap=None) %}
+{% for threshold, band_name in bands %}
+  {% if scores.overall < threshold and nxt.gap is none %}
+    {% set nxt.gap = threshold - scores.overall %}
+    {% set nxt.name = band_name %}
+  {% endif %}
+{% endfor %}
+{% set ats_lost = (100 - ats.score) %}
+{% set matched_total = job.matched_skills|length + job.missing_skills|length if job else 0 %}
+
+<!-- ===================== STICKY SECTION NAV ===================== -->
+<nav class="dash-nav" aria-label="Dashboard sections">
+  <a href="#s-overview">Overview</a>
+  <a href="#s-scores">Scores</a>
+  <a href="#s-resume">Resume</a>
+  <a href="#s-skills">Skills</a>
+  <a href="#s-role">Role match</a>
+  <a href="#s-ats">ATS</a>
+  <a href="#s-keywords">Keywords</a>
+  <a href="#s-details">Parsed data</a>
+  <a href="#s-fixes">Fixes</a>
+</nav>
+
+<!-- ===================================================================== -->
+<!-- 1. OVERVIEW                                                          -->
+<!-- ===================================================================== -->
+<section class="section" id="s-overview">
+  <div class="card-head">
+    <div>
+      <h1 style="margin-bottom:.2rem;">Analysis dashboard</h1>
+      <p class="hint" style="margin:0;">
+        {{ result.meta.filename }} &middot; {{ overview.pages }} page(s) &middot;
+        {{ overview.word_count }} words &middot; {{ result.meta.file_size_kb }} KB &middot;
+        analysed in {{ '%.2f'|format(elapsed) }}s on {{ result.meta.analyzed_at }}
+      </p>
+    </div>
+    <div class="form-actions" style="margin:0;">
+      <a class="btn btn-secondary btn-sm" href="{{ url_for('download_report', report_id=report_id) }}">Download report</a>
+      <button class="btn btn-secondary btn-sm" type="button" id="printBtn">Print</button>
+      <a class="btn btn-primary btn-sm" href="{{ url_for('analyze') }}">Analyse another</a>
+    </div>
+  </div>
+
+  <!-- Hero ring + component cards -->
+  <div class="grid grid-sidebar mb-2">
+    <div class="card lit">
+      <div class="score-hero">
+        {{ score_ring(scores.overall, 'Overall score',
+                       'Weighted blend of structure, content, skills and the ATS estimate', 206) }}
+
+        <div>
+          <div class="summary-grid" style="grid-template-columns:repeat(2,minmax(0,1fr)); margin:0;">
+            {% for component in comps %}
+            <div class="summary-card" style="--rail: {{ score_rail(component.score) }};">
+              <div class="sc-head">
+                <span class="sc-title">{{ component.label|replace(' Score','') }}</span>
+                <span class="grade-pill {{ 'grade-good' if component.score >= 80 else ('grade-warn' if component.score >= 60 else 'grade-bad') }}">
+                  x{{ '%.2f'|format(component.weight) }}
+                </span>
+              </div>
+              <div class="sc-value tone-{{ 'good' if component.score >= 80 else ('primary' if component.score >= 60 else 'warn') }}">
+                {{ '%.0f'|format(component.score) }}<small>/100</small>
+              </div>
+              {{ meter(component.score, '', tone_for(component.score)) }}
+              <p class="sc-note">{{ component.breakdown|length }} sub-check(s) &middot;
+                lowest: {{ (component.breakdown|sort(attribute='score')|first).label }}</p>
+            </div>
+            {% endfor %}
+
+            <div class="summary-card" style="--rail: {{ score_rail(job.match_score) if job else 'var(--text-3)' }};">
+              <div class="sc-head">
+                <span class="sc-title">Job match</span>
+                {% if job %}<span class="grade-pill">{{ job.role_category }}</span>{% endif %}
+              </div>
+              {% if job %}
+              <div class="sc-value tone-{{ 'good' if job.match_score >= 70 else ('primary' if job.match_score >= 45 else 'warn') }}">
+                {{ '%.0f'|format(job.match_score) }}<small>/100</small>
+              </div>
+              {{ meter(job.match_score, '', 'success' if job.match_score >= 70 else 'primary') }}
+              <p class="sc-note">{{ job.matched_skills|length }}/{{ matched_total }} role skills
+                matched &middot; similarity only.</p>
+              {% else %}
+              <div class="sc-value tone-muted">&ndash;</div>
+              <p class="sc-note">No target role selected, so no similarity score was
+                computed. The four quality scores above are unaffected.</p>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Derived insight stack: the "so what" of the numbers -->
+    <div class="stack">
+      <div class="card lit">
+        <div class="card-head"><h3>ATS compatibility</h3>
+          <span class="grade-pill {{ 'grade-good' if ats.score >= 80 else ('grade-warn' if ats.score >= 60 else 'grade-bad') }} nums">{{ ats.score|int }}/100</span>
+        </div>
+        {{ meter(ats.score, 'Automated readability estimate', tone_for(ats.score)) }}
+        <p class="small muted mt-1">
+          {{ ats_lost|round(1) }} point{{ '' if ats_lost == 1 else 's' }} are still
+          available across the 8 documented checks.
+        </p>
+        <a class="btn btn-secondary btn-sm mt-1" href="#s-ats">See the 8 checks</a>
+      </div>
+
+      <div class="card lit">
+        <div class="card-head"><h3>Skills detected</h3></div>
+        <div class="stat-row">
+          <div class="stat">
+            <span class="stat-label">Technical</span>
+            <span class="stat-value nums">{{ skills.technical|length }}</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Categories</span>
+            <span class="stat-value nums">{{ skills.technical_by_category|length }}</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Soft</span>
+            <span class="stat-value nums">{{ skills.soft|length }}</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Mentions</span>
+            <span class="stat-value nums">{{ skills.total_matches }}</span>
+          </div>
+        </div>
+        <p class="small muted mt-1">Counted only where the skill words actually appear in
+          the text &mdash; nothing is inferred.</p>
+      </div>
+
+      <div class="disclaimer">
+        <span aria-hidden="true">&#8599;</span>
+        <div>
+          <strong>Strongest:</strong> {{ best.label }} at {{ '%.0f'|format(best.score) }}.
+          <strong>Biggest gap:</strong> {{ worst.label }} at {{ '%.0f'|format(worst.score) }}
+          {{ '(' ~ (100 - worst.score)|round(0)|int ~ ' points left)' }}.
+          {% if nxt.name %}
+          <strong>{{ nxt.gap|round(0)|int }} more point{{ '' if nxt.gap|round(0)|int == 1 else 's' }}</strong>
+          moves the overall score into &ldquo;{{ nxt.name }}&rdquo;.
+          {% else %}This is the highest band available.{% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Consolidated honesty note: one place instead of five repeats -->
+  <div class="notice">
+    <strong>How to read this.</strong>
+    Overall = {{ scores.weights.structure }} &times; Structure +
+    {{ scores.weights.content }} &times; Content + {{ scores.weights.skills }} &times; Skills +
+    {{ scores.weights.ats }} &times; ATS estimate. Job Match is reported separately and never
+    changes the overall score. The
+    <a href="{{ url_for('methodology') }}">scoring methodology</a> page lists every rule.
+  </div>
+</section>
+
+<!-- ===================================================================== -->
+<!-- 2. SCORE BREAKDOWN                                                   -->
+<!-- ===================================================================== -->
+<section class="section" id="s-scores">
+  <div class="section-head">
+    <h2><span class="section-icon">1</span> Score breakdown</h2>
+    <p class="hint">A radar plot shows balance at a glance; the table shows the exact
+      arithmetic behind every component.</p>
+  </div>
+
+  <div class="grid grid-sidebar mb-2">
+    <div class="card lit">
+      <div class="card-head"><h3>Every sub-check, with its points</h3>
+        <span class="card-sub nums">{{ comps|map(attribute='breakdown')|map('length')|sum }} checks in total</span>
+      </div>
+      <div class="table-wrap">
+        <table class="data">
+          <thead>
+            <tr><th>Component</th><th>Sub-check</th><th class="num">Points</th><th class="num">Weight</th></tr>
+          </thead>
+          <tbody>
+            {% for component in comps %}
+              {% for item in component.breakdown %}
+              <tr>
+                {% if loop.first %}
+                <td rowspan="{{ component.breakdown|length }}">
+                  <strong>{{ component.label }}</strong><br>
+                  <span class="muted small nums">{{ '%.1f'|format(component.score) }}/100</span>
+                </td>
+                {% endif %}
+                <td>{{ item.label }}<br><span class="muted small">{{ item.detail }}</span></td>
+                <td class="num">{{ '%.1f'|format(item.score) }}</td>
+                <td class="num">x{{ '%.2f'|format(component.weight) }}</td>
+              </tr>
+              {% endfor %}
+            {% endfor %}
+          </tbody>
+          <tfoot>
+            <tr>
+              <th colspan="2">Overall Resume Score</th>
+              <th class="num nums">{{ '%.1f'|format(scores.overall) }}/100</th>
+              <th>{{ scores.grade }}</th>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+
+    <div class="stack">
+      {{ pedestal_chart('Score balance radar',
+                         charts.radar,
+                         'A dent in one axis is a weak component the average hides.') }}
+      {{ chart_block('Score distribution', charts.scores,
+                     'Overall plus each component on one 0-100 scale.') }}
+    </div>
+  </div>
+
+  {{ chart_block('Similarity across all ' ~ (result.role_overview|length) ~ ' supported roles',
+                 charts.role_fit,
+                 'The same resume compared with every role in the dataset, not only the selected one.') }}
+</section>
+
+<!-- ===================================================================== -->
+<!-- 3. RESUME OVERVIEW                                                   -->
+<!-- ===================================================================== -->
+<section class="section" id="s-resume">
+  <div class="section-head">
+    <h2><span class="section-icon">2</span> Resume overview</h2>
+    <p class="hint">What the parser found in the document &mdash; contact block,
+      recognised sections and raw document statistics.</p>
+  </div>
+
+  <div class="grid grid-sidebar">
+    <div class="stack">
+      <div class="card lit">
+        <div class="card-head">
+          <h3>Candidate details</h3>
+          <span class="card-sub nums">contact completeness {{ overview.contact_completeness }}/100</span>
+        </div>
+        {{ meter(overview.contact_completeness, 'Contact block completeness', tone_for(overview.contact_completeness)) }}
+        <dl class="kv-list mt-2">
+          <dt>Name</dt><dd>{{ overview.name }}</dd>
+          <dt>Email</dt>
+          <dd>
+            {% if overview.contact.emails %}
+              {% for email in overview.contact.emails %}{{ email }}{% if not loop.last %}, {% endif %}{% endfor %}
+            {% else %}<span class="muted">not detected</span>{% endif %}
+          </dd>
+          <dt>Phone</dt>
+          <dd>
+            {% if overview.contact.phones %}
+              {% for phone in overview.contact.phones %}{{ phone }}{% if not loop.last %}, {% endif %}{% endfor %}
+            {% else %}<span class="muted">not detected</span>{% endif %}
+          </dd>
+          <dt>Links</dt>
+          <dd>
+            {% if overview.contact.links %}
+              {% for link in overview.contact.links %}<span class="mono">{{ link }}</span>{% if not loop.last %}, {% endif %}{% endfor %}
+            {% else %}<span class="muted">not detected</span>{% endif %}
+          </dd>
+          <dt>Location</dt>
+          <dd>
+            {% if overview.contact.locations %}{{ overview.contact.locations|join(', ') }}
+            {% else %}<span class="muted">not detected</span>{% endif %}
+          </dd>
+        </dl>
+      </div>
+
+      <div class="card lit">
+        <div class="card-head"><h3>Sections found</h3>
+          <span class="card-sub nums">{{ overview.sections_found|length }} detected</span>
+        </div>
+        <div class="tag-cloud">
+          {% for label in overview.sections_found_labels %}
+          <span class="tag tag-core">{{ label }}</span>
+          {% else %}<span class="tag">None</span>{% endfor %}
+        </div>
+        {% if summary_text %}
+        <hr class="divider">
+        <h4>Profile / objective</h4>
+        <p class="small muted">{{ summary_text }}</p>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="stack">
+      <div class="card lit">
+        <div class="card-head"><h3>Document statistics</h3></div>
+        {{ stat_row([
+          ('Pages', overview.pages),
+          ('Words', overview.word_count),
+          ('Characters', overview.char_count),
+          ('Text lines', overview.metrics.non_empty_lines|int),
+          ('Bullet points', overview.metrics.bullet_count|int),
+          ('Avg line length', overview.metrics.avg_line_length),
+          ('Avg sentence', overview.metrics.avg_sentence_length ~ ' words'),
+          ('Special chars / 1000', overview.metrics.special_char_ratio)
+        ]) }}
+        <hr class="divider">
+        <h4>Reading speed</h4>
+        {{ meter((overview.word_count / (overview.pages or 1)) / 3, 'Words per page (3 per page = 1 minute read)', 'primary', ' pts') }}
+      </div>
+
+      <div class="card lit">
+        <div class="card-head"><h3>Section coverage</h3></div>
+        {{ meter((overview.sections_found|length) * 10, 'Sections detected (of 10 possible)', 'primary') }}
+        {{ meter((overview.missing_sections|length) * 10, 'Sections not found (of 10 possible)', 'warn') }}
+      </div>
+
+      {{ chart_block('Section detection', charts.sections,
+                     'Found versus missing for all 10 tracked section types.') }}
+    </div>
+  </div>
+</section>
+
+<!-- ===================================================================== -->
+<!-- 4. SKILLS                                                            -->
+<!-- ===================================================================== -->
+<section class="section" id="s-skills">
+  <div class="section-head">
+    <h2><span class="section-icon">3</span> Skills analysis</h2>
+    <p class="hint">Matched against the vocabulary in <span class="mono">data/skills.json</span>
+      using word-boundary aware regular expressions, so <span class="mono">C</span> is not
+      credited for <span class="mono">C++</span> and multi-word skills such as
+      <span class="mono">Power BI</span> are matched as a unit.</p>
+  </div>
+
+  <div class="grid grid-sidebar">
+    <div class="card lit">
+      <div class="card-head">
+        <h3>Technical skills by category</h3>
+        <span class="card-sub nums">{{ skills.technical|length }} skills &middot; {{ skills.technical_by_category|length }} categories</span>
+      </div>
+
+      {% if skills.technical_by_category %}
+        {% for category, items in skills.technical_by_category.items() %}
+        <div class="bar-row">
+          <div class="bar-head">
+            <span><strong>{{ category }}</strong></span>
+            <strong class="nums">{{ items|length }} skill{{ '' if items|length == 1 else 's' }}</strong>
+          </div>
+          <div class="bar" style="height:8px;">
+            <span style="width: {{ (items|length / max_cat * 100)|round(1) }}%"></span>
+          </div>
+          <div class="tag-cloud" style="margin-top:9px;">
+            {% for skill in items %}
+            <span class="tag" title="{{ skills.source_sections.get(skill, 'detected in text') }}">{{ skill }}</span>
+            {% endfor %}
+          </div>
+        </div>
+        {% endfor %}
+      {% else %}
+        {{ empty_state('No skill from the internal vocabulary was found in this resume.') }}
+      {% endif %}
+
+      <hr class="divider">
+      <h4>Soft skills</h4>
+      <div class="tag-cloud">
+        {% for skill in skills.soft %}<span class="pill pill-good">{{ skill }}</span>
+        {% else %}<span class="muted small">None detected</span>{% endfor %}
+      </div>
+
+      <hr class="divider">
+      <h4>Writing signals</h4>
+      {{ stat_row([
+        ('Action verbs', skills.action_verbs|length),
+        ('Quantified results', skills.quantifier_count),
+        ('Vague phrases', skills.filler_count),
+        ('Keyword terms', skills.keywords|length)
+      ]) }}
+      {% if skills.action_verbs %}
+      <div class="tag-cloud" style="margin-top:10px;">
+        {% for verb in skills.action_verbs[:16] %}<span class="tag tag-core">{{ verb }}</span>{% endfor %}
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="stack">
+      {{ chart_block('Technical skills by category', charts.skills,
+                     'Count of detected skills per category.') }}
+      <div class="disclaimer">
+        <span aria-hidden="true">&#128269;</span>
+        <div>
+          <strong>Why nothing is guessed.</strong>
+          A skill appears only when its name (or a listed alias such as
+          <span class="mono">sklearn</span>, <span class="mono">postgres</span> or
+          <span class="mono">js</span>) is present in the text. Adding an entry to
+          <span class="mono">data/skills.json</span> extends detection with no code change.
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================================================================== -->
+<!-- 5. JOB ROLE MATCH                                                    -->
+<!-- ===================================================================== -->
+<section class="section" id="s-role">
+  <div class="section-head">
+    <h2><span class="section-icon">4</span> Job role match</h2>
+    <p class="hint">Automated resume-to-role similarity: a keyword and text comparison.
+      It is not a statement about whether the candidate is qualified for the role.</p>
+  </div>
+
+  {% if job %}
+  <div class="grid grid-sidebar">
+    <div class="stack">
+      <div class="card lit">
+        <div class="card-head">
+          <h3>{{ job.role }}</h3>
+          <span class="card-sub">{{ job.role_category }}</span>
+        </div>
+        <p class="small muted">{{ job.role_summary }}</p>
+
+        <div class="bar-row" style="margin:16px 0;">
+          {{ meter(job.match_score, 'Job Match Score', 'success' if job.match_score >= 70 else 'primary') }}
+          {{ meter(job.skill_coverage_score, 'Weighted skill coverage (65% weight)', 'primary') }}
+          {{ meter(job.text_similarity_score, 'TF-IDF cosine similarity (35% weight)', 'primary') }}
+        </div>
+
+        <p class="notice">{{ job.explanation }}</p>
+      </div>
+
+      <div class="card lit">
+        <div class="card-head">
+          <h3>Matched skills</h3>
+          <span class="card-sub nums">{{ job.matched_skills|length }} of {{ matched_total }}</span>
+        </div>
+        {% if job.matched_skills %}
+        <div class="tag-cloud">
+          {% for skill in job.matched_core %}<span class="tag tag-match">{{ skill }} &middot; core</span>{% endfor %}
+          {% for skill in job.matched_preferred %}<span class="tag tag-core">{{ skill }} &middot; preferred</span>{% endfor %}
+          {% for skill in job.matched_bonus %}<span class="tag">{{ skill }} &middot; bonus</span>{% endfor %}
+        </div>
+        {% else %}
+          {{ empty_state('No skill listed for this role was matched.') }}
+        {% endif %}
+      </div>
+
+      <div class="card lit">
+        <div class="card-head">
+          <h3>Missing / recommended skills</h3>
+          <span class="card-sub nums">{{ job.missing_skills|length }} remaining &middot; listed by importance</span>
+        </div>
+        {% if job.missing_skills %}
+        <div class="tag-cloud">
+          {% for skill in job.missing_core %}<span class="tag tag-missing">{{ skill }} &middot; core</span>{% endfor %}
+          {% for skill in job.missing_preferred %}<span class="tag tag-warn">{{ skill }} &middot; preferred</span>{% endfor %}
+          {% for skill in job.missing_bonus %}<span class="tag">{{ skill }} &middot; bonus</span>{% endfor %}
+        </div>
+        {% else %}
+          {{ empty_state('Every skill listed for this role was found.') }}
+        {% endif %}
+
+        {% if job.unexpected_skills %}
+        <hr class="divider">
+        <h4>Other skills in the resume</h4>
+        <p class="small muted">Detected here but not part of this role profile:</p>
+        <div class="tag-cloud" style="margin-top:8px;">
+          {% for skill in job.unexpected_skills %}<span class="pill">{{ skill }}</span>{% endfor %}
+        </div>
+        {% endif %}
+      </div>
+
+      <div class="card lit">
+        <div class="card-head"><h3>What this role usually involves</h3></div>
+        <ul class="small">
+          {% for item in job.responsibilities %}<li>{{ item }}</li>{% endfor %}
+        </ul>
+        <p class="small muted mt-1">
+          Self-check: if a bullet in your resume relates to none of the above, it may not
+          be earning its space.
+        </p>
+      </div>
+    </div>
+
+    <div class="stack">
+      {{ chart_block('Role match breakdown', charts.job_match,
+                     'Matched versus missing skills, grouped by importance.') }}
+
+      <div class="card">
+        <div class="card-head"><h3>How the score is calculated</h3></div>
+        <dl class="kv-list small">
+          <dt>Core skill</dt><dd class="nums">weight 3</dd>
+          <dt>Preferred skill</dt><dd class="nums">weight 2</dd>
+          <dt>Bonus skill</dt><dd class="nums">weight 1</dd>
+          <dt>Final score</dt><dd>0.65 &times; skill coverage + 0.35 &times; cosine similarity</dd>
+        </dl>
+
+        <hr class="divider">
+        <h4>Role keywords present</h4>
+        <div class="tag-cloud">
+          {% for kw in job.matched_keywords %}<span class="tag tag-match">{{ kw }}</span>
+          {% else %}<span class="muted small">None</span>{% endfor %}
+        </div>
+        <p class="small muted mt-1">Keywords from the role profile that are absent:</p>
+        <div class="tag-cloud">
+          {% for kw in job.missing_keywords %}<span class="tag tag-missing">{{ kw }}</span>
+          {% else %}<span class="muted small">All role keywords present</span>{% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+  {% else %}
+  <div class="card">
+    {{ empty_state('No target role was selected for this analysis, so no job match score was computed.') }}
+    <div class="form-actions">
+      <a class="btn btn-primary btn-sm" href="{{ url_for('analyze') }}">Run again with a target role</a>
+    </div>
+  </div>
+  {% endif %}
+</section>
+
+<!-- ===================================================================== -->
+<!-- 6. ATS COMPATIBILITY ESTIMATE                                         -->
+<!-- ===================================================================== -->
+<section class="section" id="s-ats">
+  <div class="section-head">
+    <h2><span class="section-icon">5</span> ATS compatibility estimate</h2>
+    <p class="hint">Eight general readability checks worth 100 points. This is an
+      automated estimate and does not reproduce any specific company or vendor ATS.</p>
+  </div>
+
+  <div class="grid grid-sidebar mb-2">
+    <div class="card lit">
+      <div class="card-head">
+        <h3>All checks at a glance</h3>
+        <span class="card-sub nums">{{ ats.score|int }} / 100 earned</span>
+      </div>
+      <div class="heat-grid">
+        {% for check in ats.checks %}
+          {{ heat_cell(check.label, check.score, check.max_score, check.status) }}
+        {% endfor %}
+      </div>
+      <p class="small muted mt-2">
+        Bar length and colour show how much of each check's maximum was earned.
+        The full explanation for every check is listed below.
+      </p>
+    </div>
+
+    {{ pedestal_chart('ATS readability radar', charts.ats_radar,
+                      'The eight checks as one shape &mdash; an uneven polygon means uneven document quality.') }}
+  </div>
+
+  <div class="grid grid-sidebar">
+    <div class="card lit">
+      <div class="card-head"><h3>Individual checks</h3>
+        <span class="card-sub nums">{{ ats.checks|length }} checks &middot; total {{ ats.score }}/100</span>
+      </div>
+      {% for check in ats.checks %}
+      <div class="check check-{{ check.status }}">
+        <div class="check-mark">
+          {% if check.status == 'good' %}&#10003;{% elif check.status == 'warning' %}!{% else %}&#10007;{% endif %}
+        </div>
+        <div class="check-body">
+          <div class="check-title">
+            <span>{{ check.label }}</span>
+            <span class="check-points nums">{{ '%.1f'|format(check.score) }} / {{ check.max_score|int }}</span>
+          </div>
+          <p class="check-msg">{{ check.message }}</p>
+        </div>
+      </div>
+      {% endfor %}
+      <hr class="divider">
+      <p class="notice">{{ ats.disclaimer }}</p>
+    </div>
+
+    <div class="stack">
+      <div class="card">
+        <div class="card-head"><h3>Potential issues</h3>
+          <span class="card-sub nums">{{ ats.issues|length }}</span>
+        </div>
+        <ul class="advice-list">
+          {% for issue in ats.issues %}
+          <li class="advice-item">
+            <span class="ai-mark mark-bad">!</span>
+            <div class="ai-body"><p>{{ issue }}</p></div>
+          </li>
+          {% else %}
+          <li>{{ empty_state('No ATS readability problems were detected.') }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+
+      {% if ats.positives %}
+      <div class="card">
+        <div class="card-head"><h3>What is already good</h3>
+          <span class="card-sub nums">{{ ats.positives|length }}</span>
+        </div>
+        <ul class="small" style="margin:0;">
+          {% for item in ats.positives %}<li>{{ item }}</li>{% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+
+      {% if ats.suggestions %}
+      <div class="card">
+        <div class="card-head"><h3>Suggested fixes</h3>
+          <span class="card-sub nums">{{ ats.suggestions|length }}</span>
+        </div>
+        <ul class="small" style="margin:0;">
+          {% for item in ats.suggestions %}<li>{{ item }}</li>{% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</section>
+
+<!-- ===================================================================== -->
+<!-- 7. KEYWORD ANALYSIS                                                  -->
+<!-- ===================================================================== -->
+<section class="section" id="s-keywords">
+  <div class="section-head">
+    <h2><span class="section-icon">6</span> Keyword analysis</h2>
+    <p class="hint">TF-IDF weights rank the terms that distinguish this resume from its own
+      sentences. Frequency simply shows what the document repeats.</p>
+  </div>
+
+  <div class="grid grid-sidebar">
+    <div class="card lit">
+      <div class="card-head"><h3>Top TF-IDF keywords</h3>
+        <span class="card-sub nums">{{ skills.keywords|length }} terms</span>
+      </div>
+      {% if skills.keywords %}
+      <div class="kw-list">
+        {% for item in skills.keywords %}
+          {{ keyword_bar(item.term, (item.score / kw_max * 100),
+                          '%.3f' % item.score) }}
+        {% endfor %}
+      </div>
+      {% else %}
+        {{ empty_state('Not enough text to compute TF-IDF.') }}
+      {% endif %}
+    </div>
+
+    <div class="stack">
+      <div class="card lit">
+        <div class="card-head"><h3>Most repeated terms</h3></div>
+        <div class="kw-list">
+          {% for item in skills.frequent_terms[:12] %}
+            {{ keyword_bar(item.term, (item.count / freq_max * 100), item.count) }}
+          {% endfor %}
+        </div>
+        <p class="small muted mt-2">
+          Stop words and terms shorter than three characters are removed before counting.
+        </p>
+      </div>
+      {{ chart_block('Most frequent terms', charts.keywords,
+                     'Repeated meaningful words, plotted by count.') }}
+    </div>
+  </div>
+</section>
+
+<!-- ===================================================================== -->
+<!-- 8. PARSED DETAILS                                                    -->
+<!-- ===================================================================== -->
+<section class="section" id="s-details">
+  <div class="section-head">
+    <h2><span class="section-icon">7</span> Parsed resume details</h2>
+    <p class="hint">Structured records the parser extracted, grouped by section type.</p>
+  </div>
+
+  <div class="grid grid-2">
+    <div class="card lit">
+      <div class="card-head"><h3>Education</h3>
+        <span class="card-sub nums">{{ result.education|length }} entries</span>
+      </div>
+      {% if result.education %}
+      <div class="table-wrap">
+        <table class="data">
+          <thead><tr><th>Degree</th><th>Institution</th><th>Year</th><th>Score</th></tr></thead>
+          <tbody>
+            {% for item in result.education %}
+            <tr>
+              <td>{{ item.degree or '?' }}</td>
+              <td>{{ item.institution or '?' }}</td>
+              <td class="nums">{{ item.year or '?' }}</td>
+              <td>{{ item.score or '-' }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}{{ empty_state('No education entries were detected.') }}{% endif %}
+    </div>
+
+    <div class="card lit">
+      <div class="card-head"><h3>Experience</h3>
+        <span class="card-sub nums">{{ result.experience|length }} entries</span>
+      </div>
+      {% if result.experience %}
+      <ul class="advice-list">
+        {% for item in result.experience %}
+        <li class="advice-item">
+          <span class="ai-mark mark-fix nums">{{ loop.index }}</span>
+          <div class="ai-body">
+            <h4>{{ item.title or 'Untitled role' }}
+              {% if item.duration %}<span class="badge nums">{{ item.duration }}</span>{% endif %}</h4>
+            {% if item.organisation %}<p>{{ item.organisation }}</p>{% endif %}
+          </div>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}{{ empty_state('No experience entries were detected.') }}{% endif %}
+    </div>
+
+    <div class="card lit">
+      <div class="card-head"><h3>Projects</h3>
+        <span class="card-sub nums">{{ result.projects|length }} entries</span>
+      </div>
+      {% if result.projects %}
+      <ul class="advice-list">
+        {% for item in result.projects %}
+        <li class="advice-item">
+          <span class="ai-mark mark-fix nums">{{ loop.index }}</span>
+          <div class="ai-body">
+            <h4>{{ item.name or 'Untitled project' }}</h4>
+            {% if item.tech %}<p>Built with / details: {{ item.tech }}</p>{% endif %}
+          </div>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}{{ empty_state('No project entries were detected.') }}{% endif %}
+    </div>
+
+    <div class="card lit">
+      <div class="card-head"><h3>Certifications &amp; achievements</h3></div>
+      <h4 class="micro">Certifications</h4>
+      <ul class="small">
+        {% for item in result.certifications %}
+        <li>{{ item.name }}{% if item.issuer %} &mdash; {{ item.issuer }}{% endif %}{% if item.year and item.year not in item.name %} ({{ item.year }}){% endif %}</li>
+        {% else %}<li class="muted">None detected</li>{% endfor %}
+      </ul>
+      <hr class="divider">
+      <h4 class="micro">Achievements</h4>
+      <ul class="small">
+        {% for item in result.achievements %}<li>{{ item }}</li>
+        {% else %}<li class="muted">None detected</li>{% endfor %}
+      </ul>
+      <hr class="divider">
+      <div class="grid grid-2">
+        <div>
+          <h4 class="micro">Languages</h4>
+          <div class="tag-cloud">
+            {% for item in result.languages %}<span class="pill">{{ item }}</span>
+            {% else %}<span class="muted small">None</span>{% endfor %}
+          </div>
+        </div>
+        <div>
+          <h4 class="micro">Interests</h4>
+          <div class="tag-cloud">
+            {% for item in result.interests %}<span class="pill">{{ item }}</span>
+            {% else %}<span class="muted small">None</span>{% endfor %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================================================================== -->
+<!-- 9. FIXES                                                             -->
+<!-- ===================================================================== -->
+<section class="section" id="s-fixes">
+  <div class="section-head">
+    <h2><span class="section-icon">8</span> What to fix next</h2>
+    <p class="hint">Derived from the sub-checks above, highest impact first. A missing
+      section is an improvement opportunity, not an invalid resume.</p>
+  </div>
+
+  <div class="grid grid-sidebar mb-2">
+    <div class="card lit">
+      <div class="card-head"><h3>Prioritised recommendations</h3>
+        <span class="card-sub nums">{{ advice.recommendations|length }} actions</span>
+      </div>
+      <ul class="advice-list">
+        {% for item in advice.recommendations %}
+        <li class="advice-item">
+          <span class="ai-mark mark-fix nums">{{ loop.index }}</span>
+          <div class="ai-body">
+            <h4>{{ item.title }} {{ priority_badge(item.priority) }}</h4>
+            <p>{{ item.detail }}</p>
+          </div>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+
+    <div class="stack">
+      <div class="card lit">
+        <div class="card-head"><h3>Missing sections</h3>
+          <span class="card-sub nums">{{ missing_sections|length }} recommended</span>
+        </div>
+        <ul class="advice-list">
+          {% for item in missing_sections %}
+          <li class="advice-item">
+            <span class="ai-mark mark-bad nums">{{ loop.index }}</span>
+            <div class="ai-body">
+              <h4>{{ item.label }} {{ priority_badge(item.importance) }}</h4>
+              <p>{{ item.reason }}</p>
+            </div>
+          </li>
+          {% else %}<li>{{ empty_state('All recommended sections were detected.') }}</li>{% endfor %}
+        </ul>
+      </div>
+
+      {% if optional_sections %}
+      <div class="card">
+        <div class="card-head"><h3>Optional sections not present</h3>
+          <span class="card-sub nums">{{ optional_sections|length }}</span>
+        </div>
+        <ul class="advice-list">
+          {% for item in optional_sections %}
+          <li class="advice-item">
+            <span class="ai-mark">+</span>
+            <div class="ai-body">
+              <h4>{{ item.label }}</h4>
+              <p>{{ item.reason }}</p>
+            </div>
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="grid grid-2">
+    <div class="card lit">
+      <div class="card-head"><h3>Strengths</h3>
+        <span class="card-sub nums">{{ advice.strengths|length }} found</span>
+      </div>
+      <ul class="advice-list">
+        {% for item in advice.strengths %}
+        <li class="advice-item">
+          <span class="ai-mark mark-good">&#10003;</span>
+          <div class="ai-body">
+            <h4>{{ item.title }} {{ priority_badge(item.priority) }}</h4>
+            <p>{{ item.detail }}</p>
+          </div>
+        </li>
+        {% else %}<li>{{ empty_state('No strong signals were found yet.') }}</li>{% endfor %}
+      </ul>
+    </div>
+
+    <div class="card lit">
+      <div class="card-head"><h3>Improvement areas</h3>
+        <span class="card-sub nums">{{ advice.weaknesses|length }} found</span>
+      </div>
+      <ul class="advice-list">
+        {% for item in advice.weaknesses %}
+        <li class="advice-item">
+          <span class="ai-mark mark-bad">!</span>
+          <div class="ai-body">
+            <h4>{{ item.title }} {{ priority_badge(item.priority) }}</h4>
+            <p>{{ item.detail }}</p>
+          </div>
+        </li>
+        {% else %}<li>{{ empty_state('No significant gaps were detected.') }}</li>{% endfor %}
+      </ul>
+    </div>
+  </div>
+
+  <!-- How it was computed: full transparency -->
+  <div class="grid grid-2 mt-2">
+    <div class="card">
+      <div class="card-head"><h3>Analysis pipeline used</h3>
+        <span class="card-sub nums">{{ result.meta.pipeline|length }} stages</span>
+      </div>
+      <ol class="stack" style="gap:7px; padding-left:0; margin:0; list-style:none;">
+        {% for step in result.meta.pipeline %}
+        <li class="advice-item" style="padding:9px 12px;">
+          <span class="ai-mark mark-fix nums">{{ loop.index }}</span>
+          <div class="ai-body"><p style="color:var(--text);">{{ step }}</p></div>
+        </li>
+        {% endfor %}
+      </ol>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h3>Scoring formula used</h3></div>
+      <p class="small mono" style="white-space:pre-wrap; background:var(--surface-2);
+         padding:13px; border-radius:var(--r-sm); border:1px solid var(--line);">{{ advice.methodology.note }}</p>
+      <p class="small muted mt-2">
+        Component weights: structure {{ advice.methodology.overall_weights.structure }},
+        content {{ advice.methodology.overall_weights.content }},
+        skills {{ advice.methodology.overall_weights.skills }},
+        ATS {{ advice.methodology.overall_weights.ats }}.
+        Full rules are on the
+        <a href="{{ url_for('methodology') }}">methodology</a> page.
+      </p>
+    </div>
+  </div>
+</section>
+
+{% endblock %}

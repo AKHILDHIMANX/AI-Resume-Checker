@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block description %}{{ message }}{% endblock %}
+
+{% block content %}
+<div class="error-page">
+  <p class="error-code">{{ code }}</p>
+  <h1>{{ title }}</h1>
+  <p class="muted" style="max-width:56ch; margin:0 auto 8px;">{{ message }}</p>
+  <div class="form-actions" style="justify-content:center;">
+    <a class="btn btn-primary" href="{{ url_for('index') }}">Go to home</a>
+    <a class="btn btn-secondary" href="{{ url_for('analyze') }}">Analyse a resume</a>
+  </div>
+</div>
+{% endblock %}

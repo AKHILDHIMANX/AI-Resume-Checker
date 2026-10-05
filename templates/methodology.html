@@ -1,0 +1,216 @@
+{% extends "base.html" %}
+{% block title %}Scoring methodology{% endblock %}
+{% block description %}How AI Resume Checker calculates every score: overall, structure, content, skills, ATS estimate and job match.{% endblock %}
+
+{% block content %}
+
+<div class="section-head">
+  <h1>Scoring methodology</h1>
+  <p class="hint">Every score in AI Resume Checker comes from the rules on this page. Nothing is
+    random, and no score is ever returned without a value behind it.</p>
+</div>
+
+<nav class="dash-nav" aria-label="Methodology sections">
+  <a href="#m-overall">Overall</a>
+  <a href="#m-structure">Structure</a>
+  <a href="#m-content">Content</a>
+  <a href="#m-skills">Skills</a>
+  <a href="#m-ats">ATS estimate</a>
+  <a href="#m-job">Job match</a>
+  <a href="#m-limits">Limitations</a>
+</nav>
+
+<!-- ===================== OVERALL ===================== -->
+<section class="section" id="m-overall">
+  <div class="card lit">
+    <div class="card-head">
+      <h3>Overall Resume Score</h3>
+      <span class="card-sub">0 &ndash; 100</span>
+    </div>
+    <div class="grid grid-2">
+      <div class="notice mono" style="white-space:pre-wrap;">
+Overall = {{ overall_weights.structure }} &times; Structure
+         + {{ overall_weights.content }} &times; Content
+         + {{ overall_weights.skills }} &times; Skills
+         + {{ overall_weights.ats }} &times; ATS Estimate</div>
+      <div>
+        <h4>Grade bands</h4>
+        <div class="table-wrap">
+          <table class="data">
+            <thead><tr><th>Band</th><th class="num">Score</th></tr></thead>
+            <tbody>
+              <tr><td>Excellent</td><td class="num nums">90 &ndash; 100</td></tr>
+              <tr><td>Very Good</td><td class="num nums">80 &ndash; 89</td></tr>
+              <tr><td>Good</td><td class="num nums">70 &ndash; 79</td></tr>
+              <tr><td>Needs Improvement</td><td class="num nums">60 &ndash; 69</td></tr>
+              <tr><td>Weak</td><td class="num nums">40 &ndash; 59</td></tr>
+              <tr><td>Very Weak</td><td class="num nums">0 &ndash; 39</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <p class="small muted mt-2">
+      Job Match is reported as a separate score because it only exists when a target role
+      has been chosen. It never changes the overall score.
+    </p>
+  </div>
+</section>
+
+<!-- ===================== STRUCTURE ===================== -->
+<section class="section" id="m-structure">
+  <div class="section-head">
+    <h2><span class="section-icon">1</span> Structure Score</h2>
+    <p class="hint">How readable the document's skeleton is to an automated parser.</p>
+  </div>
+  <div class="card">
+    <div class="table-wrap">
+      <table class="data">
+        <thead><tr><th>Sub-check</th><th class="num">Weight</th><th>Rule</th></tr></thead>
+        <tbody>
+          <tr><td>Sections present</td><td class="num nums">{{ structure_weights.sections }}</td>
+              <td>Core sections count 1.0 each, optional sections 0.5 each, over the
+                  5 core + 5 optional sections.</td></tr>
+          <tr><td>Contact information</td><td class="num nums">{{ structure_weights.contact }}</td>
+              <td>Percentage of name, email, phone and at least one link that were detected.</td></tr>
+          <tr><td>Standard headings</td><td class="num nums">{{ structure_weights.headings }}</td>
+              <td>Conventional headings found / 5 recommended headings &times; 100.</td></tr>
+          <tr><td>Content organisation</td><td class="num nums">{{ structure_weights.organisation }}</td>
+              <td>60% bullet-point usage (target 8 bullets) + 40% line density.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== CONTENT ===================== -->
+<section class="section" id="m-content">
+  <div class="section-head">
+    <h2><span class="section-icon">2</span> Content Score</h2>
+    <p class="hint">Whether the writing itself carries evidence.</p>
+  </div>
+  <div class="card">
+    <div class="table-wrap">
+      <table class="data">
+        <thead><tr><th>Sub-check</th><th class="num">Weight</th><th>Rule</th></tr></thead>
+        <tbody>
+          <tr><td>Content length</td><td class="num nums">{{ content_weights.length }}</td>
+              <td>Full marks between 300 and 800 words; shorter or longer is penalised progressively.</td></tr>
+          <tr><td>Action verbs</td><td class="num nums">{{ content_weights.action_verbs }}</td>
+              <td>Distinct action verbs (developed, designed, implemented&hellip;) / 8 &times; 100.</td></tr>
+          <tr><td>Measurable results</td><td class="num nums">{{ content_weights.quantified }}</td>
+              <td>Numbers, percentages and volumes found / 4 &times; 100.</td></tr>
+          <tr><td>Sentence readability</td><td class="num nums">{{ content_weights.detail_level }}</td>
+              <td>Full marks when the average sentence is 25 words or fewer.</td></tr>
+          <tr><td>Vague phrasing</td><td class="num nums">{{ content_weights.filler }}</td>
+              <td>Starts at 100 and loses 12 points for each occurrence of phrases such as
+                  &lsquo;responsible for&rsquo; or &lsquo;etc.&rsquo;.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== SKILLS ===================== -->
+<section class="section" id="m-skills">
+  <div class="section-head">
+    <h2><span class="section-icon">3</span> Skills Score</h2>
+    <p class="hint">Depth and relevance of the skill vocabulary.</p>
+  </div>
+  <div class="card">
+    <div class="table-wrap">
+      <table class="data">
+        <thead><tr><th>Sub-check</th><th class="num">Weight</th><th>Rule</th></tr></thead>
+        <tbody>
+          <tr><td>Technical skill breadth</td><td class="num nums">{{ skills_weights.breadth }}</td>
+              <td>Number of skills from <span class="mono">data/skills.json</span> detected / 18 &times; 100.</td></tr>
+          <tr><td>Skill specificity</td><td class="num nums">{{ skills_weights.technical_share }}</td>
+              <td>Skill mentions per 100 words; full marks at 12 mentions per 100 words.</td></tr>
+          <tr><td>Soft skills</td><td class="num nums">{{ skills_weights.soft_skills }}</td>
+              <td>Soft skills detected / 5 &times; 100.</td></tr>
+          <tr><td>Keyword strength</td><td class="num nums">{{ skills_weights.keyword_strength }}</td>
+              <td>Highest TF-IDF weight in the document, scaled against 0.16.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== ATS ===================== -->
+<section class="section" id="m-ats">
+  <div class="section-head">
+    <h2><span class="section-icon">4</span> ATS Compatibility Estimate</h2>
+    <p class="hint">A heuristic readability estimate. It does not reproduce the screening
+      logic of any specific company or vendor ATS product.</p>
+  </div>
+  <div class="card">
+    <div class="table-wrap">
+      <table class="data">
+        <thead><tr><th>Check</th><th class="num">Max points</th><th>Rule</th></tr></thead>
+        <tbody>
+          {% for check in ats_checks %}
+          <tr><td>{{ check.label }}</td><td class="num nums">{{ check.points }}</td><td>{{ check.rule }}</td></tr>
+          {% endfor %}
+        </tbody>
+        <tfoot><tr><th>Total</th><th class="num nums">100</th><th>Sum of the points earned by each check</th></tr></tfoot>
+      </table>
+    </div>
+    <hr class="divider">
+    <p class="notice">
+      Typical warnings produced by these checks: <em>Skills section detected</em>,
+      <em>Experience section missing</em>, <em>very low keyword density for the
+      selected role</em>, and <em>excessive special formatting</em>.
+    </p>
+  </div>
+</section>
+
+<!-- ===================== JOB MATCH ===================== -->
+<section class="section" id="m-job">
+  <div class="section-head">
+    <h2><span class="section-icon">5</span> Job Match Score</h2>
+    <p class="hint">An automated resume-to-role similarity analysis. It measures overlap,
+      not employability.</p>
+  </div>
+  <div class="card">
+    <div class="table-wrap">
+      <table class="data">
+        <thead><tr><th>Element</th><th class="num">Value</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td>Core skill</td><td class="num nums">{{ job_weights['Core skill'] }}</td>
+              <td>A skill almost every posting for the role asks for.</td></tr>
+          <tr><td>Preferred skill</td><td class="num nums">{{ job_weights['Preferred skill'] }}</td>
+              <td>Commonly requested, but not essential.</td></tr>
+          <tr><td>Bonus skill</td><td class="num nums">{{ job_weights['Bonus skill'] }}</td>
+              <td>A nice-to-have that strengthens the profile.</td></tr>
+          <tr><td>Skill coverage</td><td class="num nums">100 max</td>
+              <td>100 &times; (weighted matched weight / total role weight).</td></tr>
+          <tr><td>TF-IDF cosine similarity</td><td class="num nums">100 max</td>
+              <td>Cosine similarity between the resume text and a role profile document
+                  built from the role name, summary, skills and responsibilities.</td></tr>
+          <tr><td><strong>Final</strong></td><td class="num nums">0 &ndash; 100</td>
+              <td>{{ job_weights['Final blend'] }}</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== LIMITATIONS ===================== -->
+<section class="section" id="m-limits">
+  <div class="section-head">
+    <h2><span class="section-icon">!</span> Honest limitations</h2>
+    <p class="hint">What this system cannot do, stated plainly.</p>
+  </div>
+  <div class="card">
+    <ul>
+      <li>The analyzer reads text only. A scanned PDF produces an error rather than a guess.</li>
+      <li>Only skills listed in <span class="mono">data/skills.json</span> can be detected. Adding an entry there extends the system with no code change.</li>
+      <li>Section detection depends on headings being visible as text. Resumes that place headings inside images are not parsed correctly.</li>
+      <li>Experience, project and education parsing is heuristic. Multi-line entries can be merged into one.</li>
+      <li>The ATS number is a readability estimate based on general practices, not a real ATS run.</li>
+      <li>No claim is made that a candidate is qualified or unqualified for any role.</li>
+    </ul>
+  </div>
+</section>
+
+{% endblock %}

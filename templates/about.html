@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% block title %}About{% endblock %}
+{% block description %}About AI Resume Checker, an MCA Semester 1 academic project built with Python and Flask.{% endblock %}
+
+{% block content %}
+
+<div class="section-head">
+  <h1>About AI Resume Checker</h1>
+  <p class="hint">An academic project built to demonstrate classical NLP and text
+    analysis in Python.</p>
+</div>
+
+<div class="stat-strip">
+  <div class="stat-tile">
+    <div class="num nums">{{ stats.job_roles }}</div>
+    <div class="lbl">Job roles</div>
+  </div>
+  <div class="stat-tile">
+    <div class="num nums">{{ stats.skills }}</div>
+    <div class="lbl">Skill entries</div>
+  </div>
+  <div class="stat-tile">
+    <div class="num nums">{{ stats.categories }}</div>
+    <div class="lbl">Categories</div>
+  </div>
+  <div class="stat-tile">
+    <div class="num nums">128</div>
+    <div class="lbl">Automated tests</div>
+  </div>
+</div>
+
+<section class="section">
+  <div class="grid grid-sidebar">
+    <div class="stack">
+      <div class="card lit">
+        <div class="card-head"><h3>Project context</h3></div>
+        <p>
+          <strong>MCA Semester 1 project</strong> for the Python Programming subject. The
+          aim was a working web application that reads a PDF resume, understands its
+          structure and gives a student useful, explainable feedback &mdash; without any
+          paid API or cloud service.
+        </p>
+        <p>
+          Everything the project claims is actually implemented in Python: text
+          extraction, cleaning, section detection, field extraction, skill matching,
+          TF-IDF keyword extraction, cosine similarity, weighted scoring and chart
+          rendering. There are no hard-coded analysis results.
+        </p>
+
+        <hr class="divider">
+        <h4>Objectives</h4>
+        <ul>
+          <li>Build a web application that accepts a PDF resume and analyses it end to end.</li>
+          <li>Apply regular expressions, frequency analysis and TF-IDF to real resume text.</li>
+          <li>Implement a transparent, explainable scoring system instead of a black box.</li>
+          <li>Compare a resume with a target role using weighted skill coverage and cosine similarity.</li>
+          <li>Keep the skill vocabulary in a data file so the system is easy to extend.</li>
+          <li>Handle invalid, corrupted and image-only PDFs with friendly messages.</li>
+          <li>Protect user privacy: no permanent storage, no public file access.</li>
+        </ul>
+      </div>
+
+      <div class="card lit">
+        <div class="card-head"><h3>What is genuinely implemented</h3></div>
+        <ul>
+          <li>PDF text extraction with <span class="mono">pypdf</span> and a
+              <span class="mono">pdfplumber</span> fallback.</li>
+          <li>Ligature, bullet, quote and line-break normalisation.</li>
+          <li>Heading detection against ~60 standard heading spellings.</li>
+          <li>Regex extraction of email, phone, links, degrees, institutions, years,
+              CGPA, date ranges, project names and certifications.</li>
+          <li>Boundary-aware skill matching with an alias map.</li>
+          <li>TF-IDF keyword extraction with scikit-learn and a frequency fallback.</li>
+          <li>Cosine similarity between the resume and a role profile document.</li>
+          <li>Weighted scoring with visible sub-checks.</li>
+          <li>Seven matplotlib charts, including two radar plots, rendered to PNG.</li>
+          <li>Optional external LLM polish, disabled unless an API key is provided
+              through an environment variable.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="stack">
+      <div class="card lit">
+        <div class="card-head"><h3>Project facts</h3></div>
+        <dl class="kv-list small">
+          <dt>Project</dt><dd>AI Resume Checker</dd>
+          <dt>Type</dt><dd>Academic mini project</dd>
+          <dt>Subject</dt><dd>MCA Semester 1, Python Programming</dd>
+          <dt>Language</dt><dd>Python (backend), HTML/CSS/JS (frontend)</dd>
+          <dt>Framework</dt><dd>Flask</dd>
+          <dt>Database</dt><dd>None</dd>
+        </dl>
+      </div>
+
+      <div class="card lit">
+        <div class="card-head"><h3>Technology used</h3></div>
+        <div class="tag-cloud">
+          <span class="tag">Python</span>
+          <span class="tag">Flask</span>
+          <span class="tag">Jinja2</span>
+          <span class="tag">pypdf</span>
+          <span class="tag">pdfplumber</span>
+          <span class="tag">NumPy</span>
+          <span class="tag">pandas</span>
+          <span class="tag">scikit-learn</span>
+          <span class="tag">Matplotlib</span>
+          <span class="tag">HTML5</span>
+          <span class="tag">CSS3</span>
+          <span class="tag">JavaScript</span>
+          <span class="tag">unittest</span>
+        </div>
+        <p class="small muted mt-2">
+          No JavaScript framework, no CSS framework and no build step &mdash; by design,
+          to keep the project small enough to read end to end.
+        </p>
+      </div>
+
+      <div class="disclaimer">
+        <span aria-hidden="true">&#128274;</span>
+        <div>
+          <strong>Privacy by design.</strong>
+          PDF type and size are validated before parsing, uploads are renamed to a random
+          safe filename, the <span class="mono">uploads/</span> folder is never served
+          statically, files are deleted immediately after analysis, and no API key is
+          ever stored in source code.
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+{% endblock %}

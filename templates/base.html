@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ self.title() }} &middot; AI Resume Checker</title>
+  <meta name="description" content="{% block description %}AI Resume Checker - an academic project that analyses a PDF resume, scores it and compares it with a target job role using NLP.{% endblock %}">
+  <meta name="author" content="AI Resume Checker - MCA Semester 1 project">
+  <meta property="og:site_name" content="AI Resume Checker">
+  <meta property="og:title" content="{{ self.title() }} &middot; AI Resume Checker">
+  <meta property="og:description" content="{% block ogdescription %}Analyse a PDF resume, score it, and compare it with a target job role using NLP.{% endblock %}">
+  <meta property="og:type" content="website">
+  <meta name="twitter:card" content="summary">
+  <meta name="color-scheme" content="light dark">
+  <link rel="icon" href="{{ url_for('static', filename='img/favicon.svg') }}" type="image/svg+xml">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <script>
+    /* Applied before first paint so the theme never flashes. */
+    (function () {
+      try {
+        var saved = localStorage.getItem("airc-theme");
+        var theme = saved || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+        document.documentElement.setAttribute("data-theme", theme);
+      } catch (e) { /* storage blocked - keep the light default */ }
+    })();
+  </script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap header-inner">
+    <a class="brand" href="{{ url_for('index') }}">
+      <span class="brand-mark" aria-hidden="true">R</span>
+      <span class="brand-text">
+        <strong>AI Resume Checker</strong>
+        <small>AI-Based Resume Analyzer</small>
+      </span>
+    </a>
+
+    <nav class="site-nav" id="siteNav" aria-label="Main navigation">
+      <a href="{{ url_for('index') }}" class="{{ 'active' if request.endpoint == 'index' }}">Home</a>
+      <a href="{{ url_for('analyze') }}" class="{{ 'active' if request.endpoint in ('analyze', 'results') }}">Analyze</a>
+      <a href="{{ url_for('methodology') }}" class="{{ 'active' if request.endpoint == 'methodology' }}">Methodology</a>
+      <a href="{{ url_for('about') }}" class="{{ 'active' if request.endpoint == 'about' }}">About</a>
+    </nav>
+
+    <div class="header-tools">
+      <button class="icon-btn" id="themeToggle" type="button"
+              aria-label="Switch colour theme" title="Switch colour theme">
+        <span id="themeIcon" aria-hidden="true">&#9681;</span>
+      </button>
+      <button class="nav-toggle" id="navToggle" type="button"
+              aria-expanded="false" aria-controls="siteNav" aria-label="Toggle navigation">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </div>
+</header>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+  <div class="wrap">
+    <div class="flash-area" id="flashArea">
+      {% for category, message in messages %}
+        <div class="flash flash-{{ category }}" role="alert">
+          <span class="flash-text">{{ message }}</span>
+          <button class="flash-close" type="button" aria-label="Dismiss">&times;</button>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+{% endwith %}
+
+<main class="site-main">
+  <div class="wrap">
+    {% block content %}{% endblock %}
+  </div>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap footer-inner">
+    <div class="footer-col">
+      <h4>AI Resume Checker</h4>
+      <p>AI-Based Resume Analyzer &mdash; an MCA Semester 1 project built with
+        Python, Flask and classical NLP techniques.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Pages</h4>
+      <ul>
+        <li><a href="{{ url_for('index') }}">Home</a></li>
+        <li><a href="{{ url_for('analyze') }}">Analyze a resume</a></li>
+        <li><a href="{{ url_for('methodology') }}">Scoring methodology</a></li>
+        <li><a href="{{ url_for('about') }}">About the project</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Privacy</h4>
+      <p>Uploaded PDFs are analysed in memory and deleted from the server
+        immediately afterwards. Nothing is stored permanently and no data is
+        shared with a third party.</p>
+    </div>
+  </div>
+  <div class="wrap footer-bottom">
+    <p>MCA Semester 1 Project &middot; Python Programming &middot; Academic use only.
+      Scores are automated estimates for self-assessment, not a hiring decision.</p>
+  </div>
+</footer>
+
+<button id="backToTop" class="fab" type="button" aria-label="Back to top">&#8593;</button>
+
+<script src="{{ url_for('static', filename='js/script.js') }}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,33 @@
+# AI Resume Checker - AI-Based Resume Analyzer
+# MCA Semester 1 Project
+#
+# Install with:
+#   python3 -m venv venv
+#   source venv/bin/activate
+#   pip install -r requirements.txt
+#
+# Version constraints are minimums so the project also installs on newer
+# Python releases (3.9 - 3.14).
+
+# --- Web framework -------------------------------------------------------
+Flask>=3.0
+
+# --- PDF text extraction -------------------------------------------------
+pypdf>=4.2
+pdfplumber>=0.11
+
+# --- Numerical processing (pandas was removed: it was never imported) ----
+numpy>=1.26
+
+# --- NLP (TF-IDF vectorisation, cosine similarity) -----------------------
+scikit-learn>=1.3
+
+# --- Charts on the dashboard --------------------------------------------
+matplotlib>=3.8
+
+# --- Optional: regenerating the project report ---------------------------
+# NOT required to run the application. Install only if you want to rebuild
+# docs/AI_Resume_Checker_Project_Report.docx:
+#   pip install python-docx
+#   python docs/generate_report.py
+# python-docx>=1.1

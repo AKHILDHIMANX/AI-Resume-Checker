@@ -1,0 +1,135 @@
+{# ===========================================================================
+   Reusable UI fragments. Everything visual lives in style.css; these macros
+   only assemble markup so the pages stay readable.
+   =========================================================================== #}
+
+{% macro score_ring(score, label, caption='', size=168) -%}
+{# Extruded circular gauge. Pure CSS - the conic-gradient takes --pct. #}
+<div class="ring-wrap">
+  <div class="ring" style="--pct: {{ '%.1f' % (score or 0) }}; --size: {{ size }}px;"
+       role="img"
+       aria-label="{{ label }}: {{ '%.0f' % (score or 0) }} out of 100">
+    <div class="ring-inner">
+      <span class="ring-value nums">{{ '%.0f' % (score or 0) }}</span>
+      <span class="ring-max">/ 100</span>
+    </div>
+  </div>
+  <p class="ring-label">{{ label }}</p>
+  {% if caption %}<p class="ring-caption">{{ caption }}</p>{% endif %}
+</div>
+{%- endmacro %}
+
+
+{% macro meter(score, label='', tone='primary', suffix='') -%}
+{# Recessed horizontal track with a glossy gradient fill. #}
+{% set pct = [score or 0, 100]|min %}
+<div class="bar-row">
+  {% if label %}
+  <div class="bar-head">
+    <span>{{ label }}</span>
+    <strong class="nums">{{ '%.1f' % pct }}{{ suffix }}</strong>
+  </div>
+  {% endif %}
+  <div class="bar bar-{{ tone }}" role="progressbar"
+       aria-valuenow="{{ '%.0f' % pct }}" aria-valuemin="0" aria-valuemax="100"
+       aria-label="{{ label or 'score' }}">
+    <span style="width: {{ pct }}%"></span>
+  </div>
+</div>
+{%- endmacro %}
+
+
+{% macro heat_cell(label, value, max_score, status) -%}
+{# One ATS check compressed into a single dense cell with a fill bar. #}
+{% set pct = ((value / max_score * 100) if max_score else 0)|round(1) %}
+{% set tone = {'good': 'var(--good)', 'warning': 'var(--warn)'}.get(status, 'var(--bad)') %}
+<div class="heat-cell" style="--fill: {{ pct }}%; --heat: {{ tone }};" title="{{ label }}: {{ '%.1f' % value }} / {{ max_score|int }}">
+  <div class="hc-top">
+    <span class="hc-label">{{ label }}</span>
+    <span class="hc-val nums">{{ '%.0f' % value }}</span>
+  </div>
+  <div class="hc-bar"><span style="width: {{ pct }}%"></span></div>
+</div>
+{%- endmacro %}
+
+
+{% macro keyword_bar(term, value, detail='') -%}
+{# Proportional bar instead of a table row - easier to scan. #}
+<div class="kw">
+  <span class="kw-term" title="{{ term }}">{{ term }}</span>
+  <span class="kw-track"><span style="width: {{ [value, 100]|min }}%"></span></span>
+  <span class="kw-val nums">{{ detail }}</span>
+</div>
+{%- endmacro %}
+
+
+{% macro chart_block(title, url, caption='') -%}
+{% if url %}
+<figure class="chart-card">
+  <figcaption>
+    <h3>{{ title }}</h3>
+    {% if caption %}<p>{{ caption }}</p>{% endif %}
+  </figcaption>
+  <img src="{{ url }}" alt="{{ title }}" loading="lazy" width="800" height="480">
+</figure>
+{% endif %}
+{%- endmacro %}
+
+
+{% macro pedestal_chart(title, url, caption='') -%}
+{# Radar plot tilted on a 3D slab. #}
+{% if url %}
+<figure class="pedestal">
+  <figcaption>
+    <h3>{{ title }}</h3>
+    {% if caption %}<p>{{ caption }}</p>{% endif %}
+  </figcaption>
+  <div class="pedestal-img">
+    <img src="{{ url }}" alt="{{ title }}" loading="lazy" width="640" height="520">
+  </div>
+</figure>
+{% endif %}
+{%- endmacro %}
+
+
+{% macro stat_row(items) -%}
+<div class="stat-row">
+  {% for label, value in items %}
+  <div class="stat">
+    <span class="stat-label">{{ label }}</span>
+    <span class="stat-value nums">{{ value }}</span>
+  </div>
+  {% endfor %}
+</div>
+{%- endmacro %}
+
+
+{% macro empty_state(message) -%}
+<p class="empty-state">{{ message }}</p>
+{%- endmacro %}
+
+
+{% macro priority_badge(priority) -%}
+{% set p = (priority or 'Medium')|lower %}
+<span class="badge badge-{{ p }}">{{ priority }}</span>
+{%- endmacro %}
+
+
+{% macro tone_for(score) -%}
+{# Maps a 0-100 score to the CSS colour token used by meters and rails. #}
+{%- if score >= 80 -%}success
+{%- elif score >= 60 -%}primary
+{%- elif score >= 40 -%}warn
+{%- else -%}danger
+{%- endif -%}
+{%- endmacro %}
+
+
+{% macro score_rail(score) -%}
+{# CSS colour for a card's left accent rail, matching its performance. #}
+{%- if score >= 80 -%}var(--good)
+{%- elif score >= 60 -%}var(--accent)
+{%- elif score >= 40 -%}var(--warn)
+{%- else -%}var(--bad)
+{%- endif -%}
+{%- endmacro %}

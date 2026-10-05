@@ -1,0 +1,102 @@
+# ===========================================================================
+# AI Resume Checker - AI-Based Resume Analyzer
+# MCA Semester 1 Project
+# ===========================================================================
+
+# --- Virtual environments -------------------------------------------------
+venv/
+.venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# --- Secrets --------------------------------------------------------------
+# API keys are read from environment variables only. Never commit a .env.
+.env
+.env.*
+!.env.example
+
+# --- Python bytecode ------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# --- Packaging / build output ---------------------------------------------
+build/
+dist/
+sdist/
+wheels/
+*.egg-info/
+*.egg
+.eggs/
+pip-wheel-metadata/
+
+# --- Test and coverage artefacts ------------------------------------------
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.tox/
+.nox/
+.hypothesis/
+
+# --- Type checkers and linters --------------------------------------------
+.mypy_cache/
+.dmypy.json
+.ruff_cache/
+.pyre/
+
+# --- Runtime data (never commit a real resume) ----------------------------
+# Uploaded PDFs are deleted after analysis; the folder is kept only as a
+# placeholder so the application can start on a fresh clone.
+uploads/*
+!uploads/.gitkeep
+
+# Generated analysis output - contains the user's resume content.
+reports/*
+!reports/.gitkeep
+
+# Charts are regenerated on every run.
+static/img/charts/*.png
+
+# --- Logs -----------------------------------------------------------------
+*.log
+logs/
+pip-log.txt
+
+# --- Editors and IDEs -----------------------------------------------------
+.vscode/
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+*~
+.project
+.settings/
+*.sublime-project
+*.sublime-workspace
+nbconvert.ipynb
+.ipynb_checkpoints/
+
+# --- Operating systems ----------------------------------------------------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# --- Jupyter --------------------------------------------------------------
+.ipynb_checkpoints/
+
+# --- Documentation build output -------------------------------------------
+_site/
+*.pdf.orig
