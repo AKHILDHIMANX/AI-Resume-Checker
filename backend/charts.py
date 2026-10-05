@@ -35,10 +35,46 @@ from __future__ import annotations
 import base64
 import io
 import os
+import tempfile
 import uuid
 from typing import Dict, List, Optional
 
-import matplotlib
+
+def _matplotlib_config_dir() -> None:
+    """
+    Point matplotlib at a writable directory before it is imported.
+
+    Matplotlib writes a font cache under ``~/.cache/matplotlib`` the first time
+    it draws. A serverless host commonly has a read-only home directory, and
+    matplotlib then falls back to a temporary directory of its own while
+    warning on every import. Choosing the location up front keeps that noise out
+    of the logs, keeps the cache reusable across invocations when it can be, and
+    never fails the way a read-only ``~`` would.
+    """
+    if os.environ.get("MPLCONFIGDIR"):
+        return  # already chosen explicitly; do not second-guess the operator
+    for candidate in (
+        os.path.join(os.path.expanduser("~"), ".cache", "matplotlib"),
+        os.path.join(tempfile.gettempdir(), "matplotlib"),
+    ):
+        try:
+            os.makedirs(candidate, exist_ok=True)
+            probe = os.path.join(candidate, ".write-probe")
+            with open(probe, "w", encoding="utf-8") as handle:
+                handle.write("ok")
+            os.remove(probe)
+        except OSError:
+            continue
+        os.environ["MPLCONFIGDIR"] = candidate
+        return
+    # Nothing is writable. matplotlib will pick its own fallback and warn, but
+    # failing here would mean failing to import the chart module at all.
+    os.environ["MPLCONFIGDIR"] = tempfile.gettempdir()
+
+
+_matplotlib_config_dir()
+
+import matplotlib  # noqa: E402  (must follow _matplotlib_config_dir)
 
 matplotlib.use("Agg")  # headless backend - must be set before pyplot import
 import matplotlib.pyplot as plt  # noqa: E402
