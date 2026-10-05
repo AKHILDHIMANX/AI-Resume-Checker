@@ -245,10 +245,13 @@ directory when it is writable and to the system temporary directory when it is n
 twenty most recent analyses are also held in memory. A saved analysis therefore works
 immediately after an upload on either host. What does change is persistence — a temporary
 directory and a process both disappear with the instance, so on Vercel a `/results/<id>` URL
-revisited after the instance is recycled shows *"no longer available"* and asks the user to
-upload again. Nothing else regresses: uploads are still deleted after analysis, every score is
-computed the same way, and the dashboard, the downloadable report and the JSON API all behave
-identically.
+that misses its owning instance cannot be served from a shared store. To keep a working copy
+in that case, the dashboard stores its own report in the visitor's browser and offers to
+restore it from there, so no database is needed. What genuinely does not survive is opening
+a shared link on a different device or after clearing browser storage, in which case the
+page offers to re-upload rather than showing an error. Uploads are still deleted after
+analysis, every score is computed the same way, and the dashboard, the downloadable report
+and the JSON API all behave identically on both hosts.
 
 Deploy manually once with the Vercel CLI, then every push afterwards updates the site:
 

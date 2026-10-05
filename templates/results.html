@@ -909,3 +909,22 @@
 </section>
 
 {% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+  (function () {
+    // Keep a copy in the visitor's own browser so the report survives a
+    // serverless deployment recycling its instance. This is the only place
+    // the report is stored beyond the single request, because the app keeps
+    // no database.
+    try {
+      localStorage.setItem("airc:{{ report_id }}", JSON.stringify({
+        result: {{ result | tojson }},
+        text: {{ report_text | tojson }},
+        saved: new Date().toISOString()
+      }));
+    } catch (e) { /* storage blocked or unavailable - non-fatal */ }
+  })();
+</script>
+{% endblock %}

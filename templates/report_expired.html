@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+
+{% block title %}Report unavailable{% endblock %}
+{% block description %}That AI Resume Checker report is not available on this server right now.{% endblock %}
+
+{% block content %}
+<section class="section">
+  <div class="container narrow">
+    <h1>Report not available here</h1>
+    {% if unreadable %}
+    <p class="muted">That analysis was stored but <strong>could not be read</strong> back, so it cannot be restored. Please run the analysis again.</p>
+    {% else %}
+    <p class="muted">This report is <strong>no longer available</strong> on the server. Servers without a database sometimes move a request between instances, so the most reliable copy is the one kept in your own browser.</p>
+    <p id="restore-status" class="muted">Checking this browser for your saved report&hellip;</p>
+    {% endif %}
+    <p><a class="btn" href="{{ url_for('analyze') }}">Analyse a resume</a></p>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+  (function () {
+    var id = {{ report_id | tojson }};
+    var status = document.getElementById("restore-status");
+    function setStatus(msg) { if (status) status.textContent = msg; }
+    var raw;
+    try { raw = localStorage.getItem("airc:" + id); } catch (e) { raw = null; }
+    if (!raw) {
+      setStatus("No saved copy was found in this browser. Please run the analysis again.");
+      return;
+    }
+    var saved;
+    try { saved = JSON.parse(raw); } catch (e) {
+      setStatus("No saved copy was found in this browser. Please run the analysis again.");
+      return;
+    }
+    setStatus("Restoring your report\u2026");
+    fetch("/api/report/" + encodeURIComponent(id), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ result: saved.result, text: saved.text })
+    }).then(function (r) {
+      if (r.ok) { location.reload(); }
+      else { setStatus("This saved report could not be restored. Please run the analysis again."); }
+    }).catch(function () {
+      setStatus("This saved report could not be restored. Please run the analysis again.");
+    });
+  })();
+</script>
+{% endblock %}

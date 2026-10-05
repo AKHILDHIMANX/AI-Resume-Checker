@@ -336,7 +336,7 @@ def analyze():
     return redirect(url_for("results", report_id=report_id))
 
 
-def _render_results(result: dict, report_id: str, elapsed: float):
+def _render_results(result: dict, report_id: str, elapsed: float, text: str = ""):
     """Render the dashboard from a stored analysis result."""
     return render_template(
         "results.html",
@@ -351,6 +351,7 @@ def _render_results(result: dict, report_id: str, elapsed: float):
         advice=result["advice"],
         charts=result["charts"],
         roles=get_role_options(),
+        report_text=text,
     )
 
 
@@ -362,19 +363,21 @@ def results(report_id: str):
         flash("Invalid report reference.", "error")
         return redirect(url_for("index"))
 
-    result, _text, status = _recall_report(safe_id)
+    result, text, status = _recall_report(safe_id)
     if status == "unreadable":
-        flash("That analysis could not be read. Please run it again.", "warn")
-        return redirect(url_for("analyze"))
+        return render_template(
+            "report_expired.html", report_id=safe_id, unreadable=True,
+        ), 200
     if result is None:
-        flash(
-            "That analysis is no longer available. Please upload your resume again.",
-            "warn",
-        )
-        return redirect(url_for("analyze"))
+        # The server may be stateless across instances, so the copy of the
+        # analysis the browser kept is the canonical record here. Offer it
+        # a chance to restore before asking the user to start over.
+        return render_template(
+            "report_expired.html", report_id=safe_id, unreadable=False,
+        ), 200
 
     elapsed = float(result.get("meta", {}).get("elapsed_seconds") or 0.0)
-    return _render_results(result, safe_id, elapsed)
+    return _render_results(result, safe_id, elapsed, text=text)
 
 
 @app.route("/report/<report_id>")
@@ -408,6 +411,23 @@ def report_json(report_id: str):
     if result is None:
         return jsonify({"error": "Report not found."}), 404
     return jsonify(result)
+
+
+@app.route("/api/report/<report_id>", methods=["POST"])
+def report_restore(report_id: str):
+    """Re-import a stored analysis from the visitor's browser."""
+    safe_id = secure_filename(report_id or "")
+    if not safe_id:
+        return jsonify({"error": "Invalid report reference."}), 400
+
+    payload = request.get_json(silent=True) or {}
+    result = payload.get("result")
+    text = payload.get("text")
+    if not isinstance(result, dict) or "scores" not in result:
+        return jsonify({"error": "The supplied analysis data is not usable."}), 400
+
+    _remember_report(safe_id, result, text if isinstance(text, str) else "")
+    return jsonify({"restored": safe_id}), 200
 
 
 @app.route("/api/analyze", methods=["POST"])

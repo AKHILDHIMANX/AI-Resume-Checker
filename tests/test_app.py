@@ -408,11 +408,11 @@ class TestFlaskRoutes(unittest.TestCase):
             # The PDF is gone, so the page must not need it a second time.
             self.assertNotIn(b"Traceback", page.data)
 
-    def test_missing_results_id_redirects_to_upload(self):
-        response = self.client.get("/results/nope", follow_redirects=True)
+    def test_missing_results_id_shows_restore_page(self):
+        response = self.client.get("/results/nope")
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"no longer available", response.data)
-        self.assertIn(b"Target job role", response.data)
+        self.assertIn(b"Analyse a resume", response.data)
 
     def test_corrupt_stored_report_is_handled(self):
         data = {"resume": (io.BytesIO(sample_pdf_bytes()), "cv.pdf")}
@@ -432,6 +432,32 @@ class TestFlaskRoutes(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotIn(b"Traceback", response.data)
         self.assertIn(b"could not be read", response.data)
+
+    def test_report_can_be_restored_from_browser_data(self):
+        """A report expired on the server can be put back from the browser copy."""
+        data = {"resume": (io.BytesIO(sample_pdf_bytes()), "cv.pdf"),
+                "job_role": "Python Developer"}
+        posted = self.client.post("/analyze", data=data,
+                                  content_type="multipart/form-data")
+        report_id = posted.headers["Location"].split("/results/", 1)[1].split("?", 1)[0]
+
+        stored, _text, _status = resume_app._recall_report(report_id)
+        as_json = self.client.get(f"/api/report/{report_id}")
+        self.assertEqual(as_json.status_code, 200)
+
+        # Simulate the server losing its copy (new instance / restart).
+        resume_app._REPORT_CACHE.pop(report_id, None)
+        os.remove(os.path.join(resume_app.REPORTS_DIR, f"{report_id}.json"))
+        os.remove(os.path.join(resume_app.REPORTS_DIR, f"{report_id}.txt"))
+        page = self.client.get(f"/results/{report_id}")
+        self.assertIn(b"no longer available", page.data)
+
+        restore = self.client.post(f"/api/report/{report_id}",
+                                   json={"result": stored, "text": _text})
+        self.assertEqual(restore.status_code, 200)
+        page = self.client.get(f"/results/{report_id}")
+        self.assertEqual(page.status_code, 200)
+        self.assertIn(b"Overall score", page.data)
 
     def test_success_flash_is_shown_on_the_results_page(self):
         data = {"resume": (io.BytesIO(sample_pdf_bytes()), "cv.pdf")}

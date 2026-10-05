@@ -107,3 +107,5 @@ $RECYCLE.BIN/
 # --- Documentation build output -------------------------------------------
 _site/
 *.pdf.orig
+.vercel
+.env*
