@@ -30,18 +30,21 @@ import json
 import os
 import re
 import secrets
+import tempfile
+import threading
 import time
 import uuid
+from collections import OrderedDict
 from datetime import datetime
 
 from flask import (
     Flask,
+    Response,
     flash,
     jsonify,
     redirect,
     render_template,
     request,
-    send_file,
     url_for,
 )
 from werkzeug.utils import secure_filename
@@ -57,8 +60,6 @@ from backend.job_matcher import JobDataError, UnknownRoleError
 # Application setup
 # --------------------------------------------------------------------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
-REPORTS_DIR = os.path.join(BASE_DIR, "reports")
 DATA_DIR = os.path.join(BASE_DIR, "data")
 
 ALLOWED_EXTENSIONS = {".pdf"}
@@ -73,10 +74,48 @@ def _env_float(name: str, default: float) -> float:
     return value if value > 0 else default
 
 
-MAX_FILE_SIZE_MB = int(_env_float("MAX_FILE_MB", 5))
+def _writable_dir() -> str:
+    """
+    Return a directory this process can actually write to.
+
+    A normal machine (and the Vercel build step) can write inside the project,
+    so that is tried first and the layout stays as documented. A serverless
+    runtime mounts the project read-only and permits writes only under the
+    system temporary directory, so that is used instead. The location is probed
+    rather than assumed, because guessing wrong fails at the first upload.
+    """
+    preferred = os.environ.get("STORAGE_DIR") or BASE_DIR
+    fallback = os.path.join(tempfile.gettempdir(), "ai-resume-checker")
+    for candidate in (preferred, fallback):
+        try:
+            os.makedirs(candidate, exist_ok=True)
+            probe = os.path.join(candidate, ".write-probe")
+            with open(probe, "w", encoding="utf-8") as handle:
+                handle.write("ok")
+            os.remove(probe)
+            return candidate
+        except OSError:
+            continue
+    # Nothing is writable. Analysis still works because nothing below treats
+    # storage as mandatory; each write site handles its own failure.
+    return tempfile.gettempdir()
+
+
+STORAGE_DIR = _writable_dir()
+UPLOAD_DIR = os.path.join(STORAGE_DIR, "uploads")
+REPORTS_DIR = os.path.join(STORAGE_DIR, "reports")
+
+# Vercel rejects a request body above 4.5 MB, so the default upload limit is
+# kept below that. Raise MAX_FILE_MB on a host with no such limit.
+MAX_FILE_SIZE_MB = int(_env_float("MAX_FILE_MB", 4))
 MAX_CONTENT_LENGTH = MAX_FILE_SIZE_MB * 1024 * 1024
 
-app = Flask(__name__)
+# Static assets live under public/static rather than a top-level static/
+# folder. Vercel serves everything in public/ from its CDN at the matching
+# URL, so /static/css/style.css is delivered without starting the application.
+# Pointing Flask at the same directory keeps local development identical and
+# leaves one copy of each file rather than two.
+app = Flask(__name__, static_folder="public/static", static_url_path="/static")
 app.config.update(
     MAX_CONTENT_LENGTH=MAX_CONTENT_LENGTH,
     UPLOAD_FOLDER=UPLOAD_DIR,
@@ -98,8 +137,15 @@ def looks_like_pdf(data: bytes) -> bool:
     return PDF_MAGIC in data[:1024]
 
 
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-os.makedirs(REPORTS_DIR, exist_ok=True)
+# Both directories are normally created by _writable_dir(). These calls cover
+# the case where the process cannot write anywhere: failing to start would be a
+# worse outcome than starting with no storage, and every write site below
+# already handles its own failure.
+for _directory in (UPLOAD_DIR, REPORTS_DIR):
+    try:
+        os.makedirs(_directory, exist_ok=True)
+    except OSError:  # pragma: no cover - only on a fully read-only filesystem
+        pass
 
 
 # --------------------------------------------------------------------------
@@ -316,20 +362,15 @@ def results(report_id: str):
         flash("Invalid report reference.", "error")
         return redirect(url_for("index"))
 
-    path = os.path.join(REPORTS_DIR, f"{safe_id}.json")
-    if not os.path.exists(path):
+    result, _text, status = _recall_report(safe_id)
+    if status == "unreadable":
+        flash("That analysis could not be read. Please run it again.", "warn")
+        return redirect(url_for("analyze"))
+    if result is None:
         flash(
             "That analysis is no longer available. Please upload your resume again.",
             "warn",
         )
-        return redirect(url_for("analyze"))
-
-    try:
-        with open(path, "r", encoding="utf-8") as handle:
-            result = json.load(handle)
-    except (OSError, ValueError) as exc:  # unreadable or truncated report
-        app.logger.warning("Could not read stored report %s: %s", safe_id, exc)
-        flash("That analysis could not be read. Please run it again.", "warn")
         return redirect(url_for("analyze"))
 
     elapsed = float(result.get("meta", {}).get("elapsed_seconds") or 0.0)
@@ -344,28 +385,29 @@ def download_report(report_id: str):
         flash("Invalid report reference.", "error")
         return redirect(url_for("index"))
 
-    report_path = os.path.join(REPORTS_DIR, f"{safe_id}.txt")
-    if not os.path.exists(report_path):
+    _result, text, status = _recall_report(safe_id)
+    if status == "unreadable":
+        flash("That report could not be read. Please run the analysis again.", "warn")
+        return redirect(url_for("index"))
+    if not text:
         flash("That report is no longer available. Please run the analysis again.", "warn")
         return redirect(url_for("index"))
 
-    return send_file(
-        report_path,
+    return Response(
+        text,
         mimetype="text/plain",
-        as_attachment=True,
-        download_name=f"AI_Resume_Checker_Report_{safe_id}.txt",
+        headers={"Content-Disposition": f'attachment; filename="AI_Resume_Checker_Report_{safe_id}.txt"'},
     )
 
 
 @app.route("/api/report/<report_id>")
 def report_json(report_id: str):
-    """Return the stored analysis JSON (same directory as the text report)."""
+    """Return the stored analysis JSON (same store as the text report)."""
     safe_id = secure_filename(report_id or "")
-    path = os.path.join(REPORTS_DIR, f"{safe_id}.json")
-    if not os.path.exists(path):
+    result, _text, _status = _recall_report(safe_id)
+    if result is None:
         return jsonify({"error": "Report not found."}), 404
-    with open(path, "r", encoding="utf-8") as handle:
-        return jsonify(json.load(handle))
+    return jsonify(result)
 
 
 @app.route("/api/analyze", methods=["POST"])
@@ -542,20 +584,102 @@ def server_error(_error):  # pragma: no cover
 # --------------------------------------------------------------------------
 # Internal helpers
 # --------------------------------------------------------------------------
+# How many analyses to keep in memory. Bounds growth on a long-running server
+# while comfortably covering a session of normal use.
+MEMORY_REPORTS = 20
+
+_REPORT_CACHE: "OrderedDict[str, dict]" = OrderedDict()
+_REPORT_CACHE_LOCK = threading.Lock()
+
+
+def _remember_report(report_id: str, result: dict, text: str) -> None:
+    """Keep the newest analyses in memory so they survive a read-only disk."""
+    with _REPORT_CACHE_LOCK:
+        _REPORT_CACHE[report_id] = {"result": result, "text": text}
+        while len(_REPORT_CACHE) > MEMORY_REPORTS:
+            _REPORT_CACHE.popitem(last=False)
+
+
+def _cached(report_id: str):
+    """Return the in-memory copy of an analysis as ``(result, text)``.
+
+    Both fields are ``None`` when nothing is held for this id.
+    """
+    with _REPORT_CACHE_LOCK:
+        entry = _REPORT_CACHE.get(report_id)
+    if entry is None:
+        return None, None
+    return entry["result"], entry["text"]
+
+
+def _recall_report(report_id: str):
+    """Return ``(result, text, status)`` for a stored analysis.
+
+    ``status`` is ``"ok"``, ``"missing"`` (nothing stored under this id) or
+    ``"unreadable"`` (a file exists but could not be parsed). The callers turn
+    those into different messages, so the distinction is kept here.
+
+    The file on disk is consulted first because it is the only copy that
+    outlives the process. The in-memory copy is a fallback for a host with a
+    read-only filesystem, where nothing was written in the first place. A file
+    that exists but is corrupt is reported rather than silently replaced by the
+    cached copy, because a corrupt file means the stored data is unreliable and
+    the user is better served by being told to run the analysis again.
+    """
+    json_path = os.path.join(REPORTS_DIR, f"{report_id}.json")
+
+    try:
+        with open(json_path, encoding="utf-8") as handle:
+            result = json.load(handle)
+    except ValueError as exc:
+        # The file is there but does not hold valid JSON, which is what a
+        # partial write leaves behind.
+        app.logger.warning("Could not read stored report %s: %s", report_id, exc)
+        return None, None, "unreadable"
+    except OSError as exc:
+        if os.path.exists(json_path):
+            app.logger.warning("Could not read stored report %s: %s", report_id, exc)
+            return None, None, "unreadable"
+        # Nothing readable at that path, which covers both a report that was
+        # never stored and a filesystem that refused the write. Either way the
+        # in-memory copy is the only one that can exist.
+        result, text = _cached(report_id)
+        if result is None:
+            return None, None, "missing"
+        return result, text, "ok"
+
+    try:
+        with open(os.path.join(REPORTS_DIR, f"{report_id}.txt"), encoding="utf-8") as handle:
+            text = handle.read()
+    except OSError:
+        # The dashboard still works without the downloadable text version.
+        text = ""
+
+    return result, text, "ok"
+
+
 def _save_report(result: dict, report_id: str) -> None:
-    """Persist the analysis as JSON + plain text under ``reports/``."""
+    """Persist the analysis as JSON + plain text, and remember it in memory."""
+    try:
+        text = build_plain_text_report(result)
+    except Exception:  # noqa: BLE001 - a text report must never block the result
+        app.logger.warning("Could not build text report %s", report_id)
+        text = ""
+
+    _remember_report(report_id, result, text)
+
     try:
         with open(os.path.join(REPORTS_DIR, f"{report_id}.json"), "w", encoding="utf-8") as fh:
             json.dump(result, fh, indent=2, ensure_ascii=False)
-    except OSError:  # pragma: no cover
-        app.logger.warning("Could not write JSON report %s", report_id)
+    except OSError:  # pragma: no cover - expected on a read-only filesystem
+        app.logger.info("Reports directory is not writable; using memory only")
 
-    try:
-        text = build_plain_text_report(result)
-        with open(os.path.join(REPORTS_DIR, f"{report_id}.txt"), "w", encoding="utf-8") as fh:
-            fh.write(text)
-    except OSError:  # pragma: no cover
-        app.logger.warning("Could not write text report %s", report_id)
+    if text:
+        try:
+            with open(os.path.join(REPORTS_DIR, f"{report_id}.txt"), "w", encoding="utf-8") as fh:
+                fh.write(text)
+        except OSError:  # pragma: no cover
+            app.logger.info("Reports directory is not writable; using memory only")
 
 
 def _project_stats() -> dict:

@@ -1,0 +1,15 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "functions": {
+    "app.py": {
+      "maxDuration": 60,
+      "memory": 2048,
+      "excludeFiles": "{tests/**,docs/**,venv/**,**/__pycache__/**,smoke_test.py,*.md}"
+    }
+  },
+  "env": {
+    "CHART_MODE": "inline",
+    "MAX_FILE_MB": "4",
+    "KEEP_UPLOADS": "0"
+  }
+}

@@ -61,7 +61,14 @@ reports/*
 !reports/.gitkeep
 
 # Charts are regenerated on every run.
-static/img/charts/*.png
+public/static/img/charts/*.png
+
+# --- Deployment ------------------------------------------------------------
+# Vercel CLI state and the local build output.
+.vercel/
+build/
+.next/
+out/
 
 # --- Logs -----------------------------------------------------------------
 *.log

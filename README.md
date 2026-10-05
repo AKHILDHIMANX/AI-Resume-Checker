@@ -114,6 +114,8 @@ AI Resume Checker/
 ├── requirements.txt
 ├── README.md
 ├── .gitignore
+├── vercel.json                 # Deployment config: function size, env, file exclusions
+├── .python-version             # Python version pinned for the deployment platform
 │
 ├── backend/                    # All analysis logic (no web concerns)
 │   ├── __init__.py
@@ -140,12 +142,13 @@ AI Resume Checker/
 │   ├── about.html              # Project context and honesty statement
 │   └── error.html              # 404 / 413 / 500 page
 │
-├── static/
-│   ├── css/style.css           # Single stylesheet, design tokens, both themes
-│   ├── js/script.js            # Theme, nav, tilt, counters, reveal, upload, print
-│   └── img/
-│       ├── favicon.svg
-│       └── charts/             # Generated at runtime (git-ignored)
+├── public/
+│   └── static/                  # Served from the CDN in front of the app
+│       ├── css/style.css        # Single stylesheet, design tokens, both themes
+│       ├── js/script.js         # Theme, nav, tilt, counters, reveal, upload, print
+│       └── img/
+│           ├── favicon.svg
+│           └── charts/          # Generated at runtime (git-ignored)
 │
 ├── uploads/                    # Temporary uploads, deleted after analysis (git-ignored)
 ├── reports/                    # Generated .json / .txt reports (git-ignored)
@@ -222,6 +225,40 @@ pip install python-docx
 python docs/generate_report.py
 ```
 
+### Deploying
+
+The repository is <https://github.com/AKHILDHIMANX/AI-Resume-Checker>, and it deploys to
+Vercel on every push to `main`, so editing Git and republishing the site are the same action.
+
+Vercel detects `app.py` defining `app` and runs it as a Python function; `vercel.json` sets the
+function size, environment and which files to leave out of the bundle, and `.python-version`
+pins the interpreter. Two settings make the difference between working and broken on a
+serverless host:
+
+| Setting | Value | Why |
+|---------|-------|-----|
+| `CHART_MODE` | `inline` (automatic) | Vercel mounts the project read-only and gives each instance its own temporary directory, so a PNG written to disk may be requested from a different instance that never had it. Charts are returned as base64 data URIs instead, and no chart file is ever written. The app detects `VERCEL` and picks this mode itself. |
+| `MAX_FILE_MB` | `4` | Vercel rejects any request body above 4.5 MB. A 4 MB limit leaves room for the multipart boundary and filename. |
+
+Storage is probed rather than assumed: `uploads/` and `reports/` are written to the project
+directory when it is writable and to the system temporary directory when it is not, and the
+twenty most recent analyses are also held in memory. A saved analysis therefore works
+immediately after an upload on either host. What does change is persistence — a temporary
+directory and a process both disappear with the instance, so on Vercel a `/results/<id>` URL
+revisited after the instance is recycled shows *"no longer available"* and asks the user to
+upload again. Nothing else regresses: uploads are still deleted after analysis, every score is
+computed the same way, and the dashboard, the downloadable report and the JSON API all behave
+identically.
+
+Deploy manually once with the Vercel CLI, then every push afterwards updates the site:
+
+```bash
+npm install -g vercel        # or npx vercel
+vercel login
+vercel link                  # associates this directory with a Vercel project
+vercel --prod                # first deployment
+```
+
 ---
 
 ## 6. Configuration
@@ -234,7 +271,9 @@ Everything has a working default. Set these as environment variables only — ne
 | `PORT` | `5000` | Port |
 | `SECRET_KEY` | random per start | Flask session signing |
 | `FLASK_DEBUG` | `0` | Set to `1` for auto-reload and the debugger |
-| `MAX_FILE_MB` | `5` | Upload size limit |
+| `MAX_FILE_MB` | `4` | Upload size limit. Kept under the 4.5 MB request-body cap some hosts enforce |
+| `STORAGE_DIR` | project directory | Where `uploads/` and `reports/` are written. Probed at start-up and replaced with a temporary directory when the project directory is read-only |
+| `CHART_MODE` | `file`, or `inline` on Vercel | `file` writes a PNG and returns a URL; `inline` returns a base64 data URI and never touches the filesystem. Switches to `inline` automatically when `VERCEL` is set, so no configuration is needed on the first deploy |
 | `KEEP_UPLOADS` | `0` | Set to `1` to keep uploaded PDFs (debugging only) |
 | `ENABLE_AI_ASSIST` | `0` | Set to `1` to enable the optional LLM polish |
 | `OPENAI_API_KEY` | unset | Enables OpenAI polish when combined with the flag |

@@ -7,6 +7,8 @@ analysis pipeline running against a real generated PDF.
 
 import io
 import os
+import subprocess
+import sys
 import unittest
 
 from tests.helpers import (
@@ -73,27 +75,45 @@ class TestFullPipeline(unittest.TestCase):
         result = analyze_resume(self.data, "Data Analyst", "test.pdf")
         json.dumps(result)  # must not raise
 
+    def _assert_chart_reference(self, url):
+        """A chart reference is valid in whichever mode is active.
+
+        File mode returns a ``/static/...`` URL that must exist on disk. Inline
+        mode returns a base64 ``data:`` URI, which has no file behind it by
+        design, so only its shape can be checked.
+        """
+        if chart_module.INLINE_CHARTS:
+            self.assertTrue(url.startswith("data:image/png;base64,"), msg=url[:40])
+            self.assertGreater(len(url), len("data:image/png;base64,") + 64)
+            return
+        self.assertTrue(url.startswith("/static/img/charts/"))
+        # Resolved against the configured static folder, not the project root,
+        # so this keeps working wherever public/ is pointed.
+        served = os.path.join(
+            resume_app.app.static_folder,
+            url.split(resume_app.app.static_url_path + "/", 1)[1],
+        )
+        self.assertTrue(os.path.isfile(served), msg=f"missing chart file {served}")
+
     def test_charts_are_generated(self):
         result = analyze_resume(self.data, "Python Developer", "test.pdf")
         self.assertIn("scores", result["charts"])
         self.assertIn("skills", result["charts"])
         for url in result["charts"].values():
-            self.assertTrue(url.startswith("/static/img/charts/"))
-            self.assertTrue(os.path.isfile(
-                os.path.join(resume_app.BASE_DIR, url.lstrip("/"))
-            ))
+            self._assert_chart_reference(url)
 
     def test_every_chart_of_one_analysis_is_kept(self):
         """The cleanup cap must not delete a report's own charts."""
         result = analyze_resume(self.data, "Python Developer", "test.pdf")
         for url in result["charts"].values():
-            self.assertTrue(
-                os.path.isfile(os.path.join(resume_app.BASE_DIR, url.lstrip("/"))),
-                msg=f"chart {url} was pruned before its own report was read",
-            )
+            self._assert_chart_reference(url)
 
+    @unittest.skipIf(
+        chart_module.INLINE_CHARTS,
+        "inline mode never writes a PNG, so there is nothing to bound",
+    )
     def test_chart_folder_stays_bounded(self):
-        """Repeated analyses must not grow static/img/charts without limit."""
+        """Repeated analyses must not grow the chart folder without limit."""
         for _ in range(4):
             analyze_resume(self.data, "Python Developer", "test.pdf")
         pngs = [
@@ -421,6 +441,168 @@ class TestFlaskRoutes(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Analysis complete", response.data)
         self.assertIn(b"flash-success", response.data)
+
+
+class TestServerlessStorage(unittest.TestCase):
+    """Storage behaviour needed on a host with a read-only project directory.
+
+    Vercel mounts the project read-only, so uploads, reports and chart PNGs
+    cannot all be written and served the way they are on a normal machine.
+    These tests pin the fallbacks so the app stays usable there.
+    """
+
+    def test_writable_dir_falls_back_when_preferred_location_is_unusable(self):
+        """/dev/null is not a directory, so it can never be created under."""
+        previous = os.environ.get("STORAGE_DIR")
+        os.environ["STORAGE_DIR"] = "/dev/null/ai-resume-checker"
+        try:
+            chosen = resume_app._writable_dir()
+        finally:
+            if previous is None:
+                os.environ.pop("STORAGE_DIR", None)
+            else:
+                os.environ["STORAGE_DIR"] = previous
+
+        self.assertNotEqual(chosen, "/dev/null/ai-resume-checker")
+        self.assertTrue(os.path.isdir(chosen), msg=f"fallback {chosen} is not a directory")
+        self.assertTrue(os.access(chosen, os.W_OK), msg=f"fallback {chosen} is not writable")
+
+    def test_report_is_remembered_when_the_reports_directory_is_unwritable(self):
+        """A failed write must not make a finished analysis unreachable."""
+        result = analyze_resume(sample_pdf_bytes(), "Python Developer", "cv.pdf")
+        previous = resume_app.REPORTS_DIR
+        resume_app.REPORTS_DIR = "/dev/null/ai-resume-checker/reports"
+        try:
+            resume_app._save_report(result, "readonly_probe")
+            found, text, status = resume_app._recall_report("readonly_probe")
+        finally:
+            resume_app.REPORTS_DIR = previous
+
+        self.assertEqual(status, "ok")
+        self.assertIsNotNone(found)
+        self.assertEqual(found["scores"]["overall"], result["scores"]["overall"])
+        self.assertIn("AI Resume Checker", text)
+        self.assertIn("Overall", text)
+
+    def test_recall_distinguishes_missing_from_unreadable(self):
+        """The two failures need different messages, so they need distinct states."""
+        _result, _text, status = resume_app._recall_report("definitely_not_stored")
+        self.assertEqual(status, "missing")
+
+        previous = resume_app.REPORTS_DIR
+        resume_app.REPORTS_DIR = "/dev/null/ai-resume-checker/reports"
+        try:
+            resume_app._save_report({"meta": {}, "scores": {}}, "truncated_probe")
+        finally:
+            resume_app.REPORTS_DIR = previous
+
+        # A file that exists but holds invalid JSON must be reported as such
+        # rather than quietly served from memory.
+        resume_app._REPORT_CACHE.pop("truncated_probe", None)
+        broken_dir = resume_app.REPORTS_DIR
+        os.makedirs(broken_dir, exist_ok=True)
+        with open(os.path.join(broken_dir, "truncated_probe.json"), "w",
+                  encoding="utf-8") as handle:
+            handle.write('{"scores": {"overall": ')
+        try:
+            _result, _text, status = resume_app._recall_report("truncated_probe")
+        finally:
+            os.remove(os.path.join(broken_dir, "truncated_probe.json"))
+            resume_app._REPORT_CACHE.pop("truncated_probe", None)
+
+        self.assertEqual(status, "unreadable")
+
+    def test_inline_chart_mode_never_touches_the_filesystem(self):
+        """Inline mode is checked in a subprocess because it is read at import."""
+        script = (
+            "import base64, os\n"
+            "from backend import charts\n"
+            "assert charts.INLINE_CHARTS, charts.CHART_MODE\n"
+            "import matplotlib.pyplot as plt\n"
+            "fig, ax = plt.subplots()\n"
+            "ax.plot([1, 2, 3], [1, 4, 9])\n"
+            "uri = charts._save(fig, 'probe')\n"
+            "assert uri.startswith('data:image/png;base64,'), uri[:40]\n"
+            "raw = base64.b64decode(uri.split(',', 1)[1])\n"
+            "assert raw[:8] == b'\\x89PNG\\r\\n\\x1a\\n', raw[:8]\n"
+            "print('inline-ok')\n"
+        )
+        env = dict(os.environ, CHART_MODE="inline")
+        completed = subprocess.run(
+            [sys.executable, "-c", script],
+            cwd=resume_app.BASE_DIR,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=180,
+        )
+        self.assertIn("inline-ok", completed.stdout,
+                      msg=completed.stderr[-800:])
+        self.assertEqual(
+            [n for n in os.listdir(chart_module.STATIC_CHART_DIR)
+             if n.startswith("probe")],
+            [],
+            msg="inline mode wrote a PNG to disk",
+        )
+
+    def test_chart_mode_defaults_to_inline_on_vercel(self):
+        """The platform-sensitive default must not need an environment variable."""
+        script = (
+            "from backend import charts\n"
+            "print('inline' if charts.INLINE_CHARTS else 'file')\n"
+        )
+        for env in ({"VERCEL": "1"}, {"VERCEL": "true"}):
+            envvars = dict(os.environ, **env)
+            envvars.pop("CHART_MODE", None)
+            completed = subprocess.run(
+                [sys.executable, "-c", script],
+                cwd=resume_app.BASE_DIR,
+                env=envvars,
+                capture_output=True,
+                text=True,
+                timeout=180,
+            )
+            self.assertEqual(completed.stdout.strip(), "inline", msg=env)
+
+        # An explicit setting still wins over the platform default.
+        envvars = dict(os.environ, VERCEL="1", CHART_MODE="file")
+        completed = subprocess.run(
+            [sys.executable, "-c", script],
+            cwd=resume_app.BASE_DIR,
+            env=envvars,
+            capture_output=True,
+            text=True,
+            timeout=180,
+        )
+        self.assertEqual(completed.stdout.strip(), "file")
+
+    def test_unknown_chart_mode_falls_back_to_files(self):
+        """A typo in CHART_MODE must not silently switch storage strategy."""
+        script = (
+            "from backend import charts\n"
+            "print('inline' if charts.INLINE_CHARTS else 'file')\n"
+        )
+        for value in ("inline", "INLINE", " inline "):
+            completed = subprocess.run(
+                [sys.executable, "-c", script],
+                cwd=resume_app.BASE_DIR,
+                env=dict(os.environ, CHART_MODE=value),
+                capture_output=True,
+                text=True,
+                timeout=180,
+            )
+            self.assertEqual(completed.stdout.strip(), "inline", msg=value)
+
+        for value in ("file", "", "base64", "inline-but-not-really"):
+            completed = subprocess.run(
+                [sys.executable, "-c", script],
+                cwd=resume_app.BASE_DIR,
+                env=dict(os.environ, CHART_MODE=value),
+                capture_output=True,
+                text=True,
+                timeout=180,
+            )
+            self.assertEqual(completed.stdout.strip(), "file", msg=value)
 
 
 if __name__ == "__main__":

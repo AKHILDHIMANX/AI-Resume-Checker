@@ -683,7 +683,7 @@ def build_ch1(r, data):
     r.h2("1.4 Scope of the Project")
     r.p("The system in scope performs the following:")
     r.bullets([
-        "Accepts a single PDF file of at most 5 MB through a web form.",
+        f"Accepts a single PDF file of at most {data['max_file_mb']} MB through a web form.",
         "Validates the upload by extension, size and actual file signature.",
         "Extracts text with pypdf, falling back to pdfplumber when extraction is thin.",
         "Normalises ligatures, smart punctuation, bullets and hyphenated line breaks.",
@@ -918,7 +918,7 @@ def build_ch3(r, data):
     r.table(
         ["ID", "Requirement", "Priority"],
         [
-            ["FR-01", "The system shall accept one PDF file of at most 5 MB per request.", "Must"],
+            ["FR-01", f"The system shall accept one PDF file of at most {data['max_file_mb']} MB per request.", "Must"],
             ["FR-02", "The system shall reject a file whose extension is not .pdf.", "Must"],
             ["FR-03", "The system shall reject a file whose first bytes are not the PDF signature.", "Must"],
             ["FR-04", "The system shall reject an empty file.", "Must"],
@@ -1066,7 +1066,7 @@ def build_ch4(r, data):
  +--------------------------------------------------------------+
  |  PRESENTATION LAYER                                          |
  |  templates/*.html   Jinja2 pages, no client-side framework    |
- |  static/css, static/js   theme, navigation, validation        |
+ |  public/static/css, js   theme, navigation, validation        |
  +-------------------------------+------------------------------+
                                  |
                         HTTP request / response
@@ -1095,12 +1095,13 @@ def build_ch4(r, data):
  |  DATA LAYER                                                  |
  |  data/skills.json      10 categories + aliases              |
  |  data/job_roles.json   10 roles with tiered skills           |
- |  static/img/charts/    generated PNGs (git-ignored)         |
+ |  public/static/img/charts/  generated PNGs (git-ignored)     |
  |  reports/              generated JSON and text (git-ignored) |
  +--------------------------------------------------------------+
 
-            No database. State lives in the request and on disk
-            only for the duration of one analysis.
+            No database. The analysis lives in the response; the stored
+            copy is written to disk when the filesystem allows it and
+            otherwise kept in memory for the duration of the process.
  """,
         "Figure 4.1: Three-layer architecture",
     )
@@ -1591,7 +1592,7 @@ AI Resume Checker/
     job_roles.json          10 roles with tiered skills
   templates/                base, _macros, index, upload, results,
                             methodology, about, error
-  static/
+  public/static/
     css/style.css           Design tokens, both themes, responsive, print
     js/script.js            Theme, nav, tilt, counters, upload validation
     img/favicon.svg
@@ -1617,7 +1618,15 @@ AI Resume Checker/
             ["PORT", "5000", "Listening port"],
             ["SECRET_KEY", "random per start", "Flask session signing"],
             ["FLASK_DEBUG", "0", "Set to 1 for auto-reload and the debugger"],
-            ["MAX_FILE_MB", "5", "Upload size limit"],
+            ["MAX_FILE_MB", str(data["max_file_mb"]),
+             "Upload size limit; kept under the 4.5 MB body cap some hosts enforce"],
+            ["STORAGE_DIR", "project directory",
+             "Where uploads and reports are written. Probed at start-up and replaced "
+             "with a temporary directory when the project directory is read-only"],
+            ["CHART_MODE", data["chart_mode_default"],
+             "file writes PNGs and returns a URL; inline returns base64 data URIs and "
+             "never touches the filesystem. Defaults to inline automatically when the "
+             "VERCEL variable is set, so the safe mode needs no configuration"],
             ["KEEP_UPLOADS", "0", "Set to 1 to retain uploads for debugging"],
             ["ENABLE_AI_ASSIST", "0", "Enables the optional language-model polish"],
             ["OPENAI_API_KEY", "unset", "Enables the OpenAI polish when the flag is on"],
@@ -1638,7 +1647,7 @@ AI Resume Checker/
     )
     r.code(grab("app.py", "def allowed_file", "def format_file_size"),
            "Listing 5.2: Extension validation")
-    r.code(grab("app.py", "def looks_like_pdf", "os.makedirs"),
+    r.code(grab("app.py", "def looks_like_pdf", "# Both directories"),
            "Listing 5.3: PDF signature validation")
     r.p(
         "The signature check matters because a text file renamed to .pdf passes an "
@@ -1662,16 +1671,35 @@ AI Resume Checker/
         "leaking onto an unrelated later page.",
     ])
     r.p(
-        "A missing, unreadable or truncated report is handled with the same graceful "
-        "message used elsewhere; the user is returned to the upload form rather than "
-        "shown a traceback."
+        "A missing, unreadable or truncated report is handled with a graceful message; "
+        "the user is returned to the upload form rather than shown a traceback. The two "
+        "failures are deliberately distinguished, because they mean different things: an "
+        "id that holds no stored analysis is reported as no longer available, while a "
+        "file that exists but no longer parses is reported as unreadable."
+    )
+    r.p(
+        "Storage is probed rather than assumed. Writing may fail on a read-only "
+        "filesystem, so every write site treats failure as a normal outcome rather than "
+        "an exception, and the twenty most recent analyses are additionally held in "
+        "memory. A read first checks the file, because it is the only copy that outlives "
+        "the process, and falls back to memory only when nothing was written there. On a "
+        "host where nothing can be written, the analysis still renders and the dashboard "
+        "URL still resolves for as long as the process runs."
     )
 
     r.h2("5.6 Chart Generation")
     r.p(
-        "Charts are produced with Matplotlib on the Agg backend and saved as PNG. Each "
+        "Charts are produced with Matplotlib on the Agg backend and rendered to PNG. Each "
         "builder is wrapped so that a failure returns None instead of raising, which means "
-        "a plotting problem can never invalidate an otherwise correct analysis."
+        "a plotting problem can never invalidate an otherwise correct analysis. Two "
+        "rendering modes exist. File mode writes the PNG under public/static/img/charts/ "
+        "and returns a URL, which is the cheap option on a host with a writable "
+        "filesystem. Inline mode returns the PNG as a base64 data URI instead. A data URI "
+        "is accepted by img src unchanged, so no template needs to know which mode is "
+        "active, and the mode exists because a serverless platform mounts the project "
+        "read-only and gives each instance its own temporary directory: an image written "
+        "there cannot be served reliably when the next request for it is handled by a "
+        "different instance."
     )
     r.table(
         ["Chart key", "Chart", "Purpose"],
@@ -1690,10 +1718,12 @@ AI Resume Checker/
         caption="Table 5.4: Charts generated per analysis",
     )
     r.p(
-        "Generated PNGs accumulate in a static folder, so cleanup prunes the oldest files "
-        "each time charts are generated, keeping the folder bounded at forty files. The "
-        "cleanup call is placed inside the chart generation function rather than on page "
-        "load, so it runs on every path that produces charts: the web form, the JSON API "
+        "Generated PNGs accumulate in the chart folder in file mode, so cleanup prunes "
+        "the oldest files each time charts are generated, keeping the folder bounded at "
+        "forty files. In inline mode nothing is written, so cleanup returns immediately "
+        "rather than touching a directory that holds no charts. The cleanup call is "
+        "placed inside the chart generation function rather than on page load, so it runs "
+        "on every path that produces charts: the web form, the JSON API "
         "and the smoke test."
     )
 
@@ -2529,6 +2559,8 @@ def build_appendices(r, data):
 # Main
 # =========================================================================
 def collect_data():
+    import app as app_module
+    from backend import charts
     from backend import job_matcher
     from backend.analyzer import build_plain_text_report
 
@@ -2575,6 +2607,10 @@ def collect_data():
         "sample": sample,
         "text_report": build_plain_text_report(sample),
         "dataset_roles": job_matcher,
+        # Read from the modules rather than retyped, so these rows cannot drift
+        # away from the code they describe.
+        "max_file_mb": app_module.MAX_FILE_SIZE_MB,
+        "chart_mode_default": charts.CHART_MODE,
     }
 
 

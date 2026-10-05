@@ -2,8 +2,22 @@
 Chart generation for the results dashboard.
 
 Uses matplotlib with the non-interactive ``Agg`` backend so the server needs no
-display. Each chart is written to ``reports/`` as a PNG and served as a static
-file, which keeps the templates free of any JavaScript charting library.
+display. Each chart is written as a PNG and served as a static file, which
+keeps the templates free of any JavaScript charting library.
+
+Where the PNG goes depends on what the host allows:
+
+* **File mode** (default) - the chart is written to ``public/static/img/charts/``
+  and returned as a ``/static/...`` URL. Old files are pruned on every run.
+* **Inline mode** (``CHART_MODE=inline``) - the chart is returned as a
+  ``data:image/png;base64,...`` URI and nothing touches the filesystem.
+
+Inline mode exists for serverless hosts, where the project directory is
+read-only and every write must go to a per-instance temporary directory. A PNG
+written to such a directory cannot be served reliably, because the follow-up
+request for the image may be handled by a different instance and find nothing.
+Inlining removes that dependency entirely, and ``<img src>`` accepts a data URI
+unchanged, so no template needs to know which mode is active.
 
 Charts produced
 ---------------
@@ -18,6 +32,8 @@ Charts produced
 
 from __future__ import annotations
 
+import base64
+import io
 import os
 import uuid
 from typing import Dict, List, Optional
@@ -28,12 +44,24 @@ matplotlib.use("Agg")  # headless backend - must be set before pyplot import
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 
-REPORTS_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "reports"
-)  # text exports written by app.py
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+REPORTS_DIR = os.path.join(PROJECT_ROOT, "reports")  # text exports written by app.py
 STATIC_CHART_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "static", "img", "charts"
-)
+    PROJECT_ROOT, "public", "static", "img", "charts"
+)  # must match app.static_folder so the returned URL resolves
+
+# "file" (default) or "inline". Any unrecognised value falls back to "file".
+#
+# The default is chosen rather than fixed: Vercel mounts the project read-only
+# and gives each instance its own temporary directory, so a PNG written under
+# public/static/img/charts/ would be reachable only from the instance that
+# wrote it, and the request for that image may be handled by another. Detecting
+# the platform means the safe mode applies on the first deploy without any
+# environment variable having to be configured, while CHART_MODE still lets a
+# local run or a different host choose explicitly.
+_CHART_MODE_DEFAULT = "inline" if os.environ.get("VERCEL") else "file"
+CHART_MODE = (os.environ.get("CHART_MODE") or _CHART_MODE_DEFAULT).strip().lower()
+INLINE_CHARTS = CHART_MODE == "inline"
 
 # Restrained palette - no gradients, no 3D, matches the UI.
 PRIMARY = "#2f6fed"
@@ -64,8 +92,19 @@ def _new_figure(width: float = 8.0, height: float = 4.0):
 
 
 def _save(fig, name: str) -> Optional[str]:
-    """Save the figure and return the URL path Flask should serve."""
+    """Render the figure and return a value usable directly as an ``img src``.
+
+    Returns either a ``data:`` URI (inline mode) or a ``/static/...`` URL.
+    Never raises: a chart problem must not invalidate an otherwise correct
+    analysis, so a failure simply omits that chart.
+    """
     try:
+        if INLINE_CHARTS:
+            buffer = io.BytesIO()
+            fig.savefig(buffer, format="png", facecolor=BG, bbox_inches="tight")
+            encoded = base64.b64encode(buffer.getvalue()).decode("ascii")
+            return f"data:image/png;base64,{encoded}"
+
         _ensure_dir(STATIC_CHART_DIR)
         filename = f"{name}_{uuid.uuid4().hex[:8]}.png"
         fig.savefig(
@@ -455,6 +494,8 @@ def add_role_fit_chart(result: Dict) -> None:
 
 def cleanup_old_charts(max_files: int = 40) -> None:
     """Delete old generated PNGs so the repo folder does not grow forever."""
+    if INLINE_CHARTS:
+        return  # nothing is ever written to disk in inline mode
     try:
         if not os.path.isdir(STATIC_CHART_DIR):
             return
